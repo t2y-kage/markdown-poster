@@ -1,0 +1,14 @@
+{
+  "importMap": "import_map.json",
+  "lock": false,
+  "tasks": {
+    "test": "deno fmt --check && deno lint && deno check **/*.ts && deno test --allow-read --allow-net"
+  },
+  "fmt": {
+    "exclude": ["node_modules/", "build/", "dist/", ".slack/"],
+    "proseWrap": "preserve"
+  },
+  "lint": {
+    "exclude": ["node_modules/", "build/", "dist/", ".slack/"]
+  }
+}

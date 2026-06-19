@@ -1,3 +1,11 @@
+# Slack CLI (commit only hooks.json)
+.slack/*
+!.slack/hooks.json
+
+# Env files
+.env
+*.env
+
 # Deno
 # https://deno.com/
 
@@ -9,3 +17,8 @@
 # https://docs.deno.com/runtime/reference/cli/coverage/
 coverage/
 *.lcov
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
