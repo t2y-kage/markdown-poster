@@ -1,10 +1,6 @@
 import { SlackFunction } from "deno-slack-sdk/mod.ts";
 import { PostMarkdownTableDefinition } from "./definition.ts";
-import {
-  buildFallbackText,
-  buildTableBlocks,
-  EDIT_ACTION_ID,
-} from "./blocks.ts";
+import { buildTableMessage, EDIT_ACTION_ID } from "./blocks.ts";
 import { parseThreadUrl } from "./thread_url.ts";
 import { fetchLatestMarkdown, recordPost } from "./audit_log.ts";
 
@@ -12,13 +8,7 @@ const EDIT_MODAL_CALLBACK_ID = "edit_markdown_table_modal";
 const MARKDOWN_INPUT_BLOCK_ID = "markdown_input_block";
 const MARKDOWN_INPUT_ACTION_ID = "markdown_input";
 
-// chat.postMessage / chat.update に渡すための blocks キャスト
-// (deno-slack-sdk の型が markdown ブロックに未追随なため)
-type ChatBlocksArg = Record<string, unknown>[];
-
-// =============================================================================
-// 投稿先決定
-// =============================================================================
+// --- 投稿先決定 ---
 
 type PostTarget = { channel: string; thread_ts?: string };
 type ResolveResult = PostTarget | { error: string };
@@ -40,9 +30,7 @@ function resolvePostTarget(
   return { channel: parsed.channel, thread_ts: parsed.thread_ts };
 }
 
-// =============================================================================
-// インタラクション payload 取り出し
-// =============================================================================
+// --- インタラクション payload 取り出し ---
 
 // block_actions payload は deno-slack-sdk の body 型に一部フィールドが現れないので、
 // ここで構造アサーションを集約する。
@@ -62,9 +50,7 @@ function pickMessageTsFromBody(body: unknown): string | undefined {
   return b.container?.message_ts ?? b.message?.ts;
 }
 
-// =============================================================================
-// 編集モーダル
-// =============================================================================
+// --- 編集モーダル ---
 
 type EditMeta = { channel: string; ts: string };
 
@@ -109,9 +95,7 @@ function buildEditModalView(meta: EditMeta, initialValue: string) {
   };
 }
 
-// =============================================================================
-// SlackFunction 定義
-// =============================================================================
+// --- SlackFunction 定義 ---
 
 export default SlackFunction(
   PostMarkdownTableDefinition,
@@ -123,8 +107,7 @@ export default SlackFunction(
 
     const response = await client.chat.postMessage({
       channel: target.channel,
-      text: buildFallbackText(markdown),
-      blocks: buildTableBlocks(markdown) as unknown as ChatBlocksArg,
+      ...buildTableMessage(markdown),
       ...(target.thread_ts ? { thread_ts: target.thread_ts } : {}),
     });
 
@@ -199,8 +182,7 @@ export default SlackFunction(
       const updated = await client.chat.update({
         channel: meta.channel,
         ts: meta.ts,
-        text: buildFallbackText(newMarkdown),
-        blocks: buildTableBlocks(newMarkdown) as unknown as ChatBlocksArg,
+        ...buildTableMessage(newMarkdown),
       });
 
       if (!updated.ok) {

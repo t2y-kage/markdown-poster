@@ -119,8 +119,9 @@ deno test --allow-read --allow-net   # ユニットテスト
 - 編集ボタンに継続応答するため、`post_markdown_table` 関数は `completed: false`
   で 開いたままになります。Slack-hosted の関数は実行ごとに 60
   秒の制約がありますが、 ハンドラ単位の制限のため通常運用上は問題ありません。
-- アプリアイコンは任意です。設定する場合は `assets/icon.png` を配置し、
-  `manifest.ts` に `icon: "assets/icon.png"` を追加してください（既定では未設定）。
+- アプリアイコンは `manifest.ts` の `icon`（必須）で `assets/icon.png` を参照します。
+  リポジトリにはプレースホルダの `assets/icon.png` を同梱しているので、好みの画像に
+  差し替えてください。
 
 ## 監査ログ Datastore を使わない場合
 

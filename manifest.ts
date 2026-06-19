@@ -6,6 +6,7 @@ import { PostedTablesDatastore } from "./datastores/posted_tables.ts";
 export default Manifest({
   name: "markdown-table-poster",
   description: "Post Markdown tables to Slack as rich tables.",
+  icon: "assets/icon.png",
   workflows: [PostMarkdownTableWorkflow],
   functions: [PostMarkdownTableDefinition],
   datastores: [PostedTablesDatastore],

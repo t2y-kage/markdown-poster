@@ -24,7 +24,7 @@ export async function recordPost(
   rec: TableRecord,
 ): Promise<void> {
   try {
-    await client.apps.datastore.put<typeof PostedTablesDatastore.definition>({
+    await client.apps.datastore.put({
       datastore: PostedTablesDatastore.name,
       item: {
         id: crypto.randomUUID(),
@@ -46,9 +46,7 @@ export async function fetchLatestMarkdown(
   ts: string,
 ): Promise<string> {
   try {
-    const res = await client.apps.datastore.query<
-      typeof PostedTablesDatastore.definition
-    >({
+    const res = await client.apps.datastore.query({
       datastore: PostedTablesDatastore.name,
       expression: "#posted_ts = :ts",
       expression_attributes: { "#posted_ts": "posted_ts" },
