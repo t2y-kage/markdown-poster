@@ -61,6 +61,7 @@ Link(Shortcut) Trigger
 - 起動チャンネルを投稿先の既定値としてトリガーから渡す。
 
 参照:
+
 - フォーム作成: https://docs.slack.dev/tools/deno-slack-sdk/guides/creating-a-form/
 - API 呼び出し: https://docs.slack.dev/tools/deno-slack-sdk/guides/calling-slack-api-methods/
 - トリガー: https://docs.slack.dev/tools/deno-slack-sdk/guides/using-triggers/
@@ -70,6 +71,7 @@ Link(Shortcut) Trigger
 ## 4. コンポーネント仕様
 
 ### manifest.ts
+
 - workflows / functions / datastores を登録。
 - botScopes:
   - `chat:write` … メッセージ投稿
@@ -77,11 +79,13 @@ Link(Shortcut) Trigger
   - `datastore:read` / `datastore:write` … 監査ログ用（任意機能。不要なら削除）
 
 ### triggers/post_markdown_table_trigger.ts
+
 - `TriggerTypes.Shortcut`（Link トリガー）。
 - 生成された Shortcut URL をチャンネルに貼る／ブックマークして起動。
 - inputs: `interactivity`, `channel`(= 起動チャンネル) を Workflow に渡す。
 
 ### workflows/post_markdown_table.ts
+
 - input_parameters: `interactivity`(必須), `channel`(任意)。
 - Step1 `Schema.slack.functions.OpenForm`:
   - `channel`: channel_id（既定値 = トリガーの channel）
@@ -89,16 +93,19 @@ Link(Shortcut) Trigger
 - Step2 カスタムファンクション: `channel`, `markdown`, `submitted_by` を渡す。
 
 ### functions/post_markdown_table/definition.ts
+
 - inputs: `channel`(channel_id), `markdown`(string), `submitted_by`(user_id)
 - outputs: `ts`(string)
 
 ### functions/post_markdown_table/mod.ts
+
 - `client.chat.postMessage` に `blocks: [{ type: "markdown", text: markdown }]` と
   フォールバック `text` を渡す。
 - 投稿成功後、任意で Datastore に監査ログを put（失敗してもログのみで投稿成否に
   影響させない）。
 
 ### datastores/posted_tables.ts（任意）
+
 - primary_key: `id`
 - attributes: `id`, `channel`, `markdown`, `submitted_by`, `posted_ts`, `created_at`
 - 監査ログ／将来の重複防止・レビュー用途。不要なら manifest から外す。
