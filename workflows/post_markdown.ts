@@ -42,6 +42,9 @@ const formStep = PostMarkdownWorkflow.addStep(
           title: "Markdown",
           type: Schema.types.string,
           long: true,
+          // markdown ブロックの上限に合わせる。超過時はフォーム送信が
+          // バリデーションエラーでブロックされる（サイレント切り捨てを防ぐ）。
+          maxLength: 3000,
         },
       ],
     },
