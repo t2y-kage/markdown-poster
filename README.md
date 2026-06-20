@@ -1,8 +1,6 @@
 # markdown-poster
 
-Slack-hosted (Run on Slack / Deno Slack SDK) app that posts pasted Markdown
-to a Slack channel as a rich message, using Block Kit's `markdown` block.
-Markdown のテーブル記法もそのままレンダリングされます。
+Slack-hosted app (Run on Slack / Deno Slack SDK) that posts pasted Markdown as rich Block Kit messages — wrapped tables, file upload for long content, in-place edit/delete. No server, zero running cost.
 
 詳細な設計は [DESIGN.md](./DESIGN.md) を参照してください。
 
