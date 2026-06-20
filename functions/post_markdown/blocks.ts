@@ -1,5 +1,7 @@
 // Block Kit ペイロード組み立てヘルパ。
-// markdown ブロック + 「編集」ボタンの actions ブロックを返す。
+// 本文（markdown / table ブロック）+ 投稿者 + 「編集」「削除」ボタンを返す。
+
+import { splitIntoSegments } from "./markdown_table.ts";
 
 export const EDIT_ACTION_ID = "edit_markdown";
 export const DELETE_ACTION_ID = "delete_markdown";
@@ -16,6 +18,35 @@ export const FALLBACK_MAX_BYTES = 2000;
 export const EDITABLE_MAX_LEN = 3000;
 
 export type Block = { type: string; [key: string]: unknown };
+
+// GFM テーブルを table ブロックにする。全列を折り返し（is_wrapped）にして、
+// 長文セルがあっても横スクロールせず適度に改行されるようにする。セルはプレーン
+// テキスト（raw_text）として描画する（セル内の Markdown 装飾は反映されない）。
+function buildTableBlock(rows: string[][]): Block {
+  const colCount = Math.max(...rows.map((row) => row.length));
+  return {
+    type: "table",
+    column_settings: Array.from({ length: colCount }, () => ({
+      is_wrapped: true,
+    })),
+    rows: rows.map((row) =>
+      Array.from(
+        { length: colCount },
+        (_, i) => ({ type: "raw_text", text: row[i] ?? "" }),
+      )
+    ),
+  };
+}
+
+// 本文を markdown ブロック（テキスト）と table ブロック（GFM テーブル）に分けて
+// 組み立てる。テーブルが無ければ従来どおり単一の markdown ブロックになる。
+function buildContentBlocks(markdown: string): Block[] {
+  return splitIntoSegments(markdown).map((seg) =>
+    seg.kind === "table"
+      ? buildTableBlock(seg.rows)
+      : { type: "markdown", text: seg.text }
+  );
+}
 
 export function buildMarkdownBlocks(
   markdown: string,
@@ -36,7 +67,7 @@ export function buildMarkdownBlocks(
       elements: [{ type: "mrkdwn", text: info }],
     });
   }
-  blocks.push({ type: "markdown", text: markdown });
+  blocks.push(...buildContentBlocks(markdown));
   // 3,000 字を超える本文は編集モーダルで扱えないため、編集ボタンを出さない。
   const elements: Block[] = [];
   if (markdown.length <= EDITABLE_MAX_LEN) {
