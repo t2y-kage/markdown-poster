@@ -41,3 +41,15 @@ Deno.test("buildMarkdownBlocks: prepends a poster context block when postedBy is
   assertEquals(blocks[1].type, "markdown");
   assertEquals(blocks[2].type, "actions");
 });
+
+Deno.test("buildMarkdownBlocks: appends an editor line when the editor differs", () => {
+  const blocks = buildMarkdownBlocks("# hi", "U123", "U999");
+  const elements = blocks[0].elements as Array<{ type: string; text: string }>;
+  assertEquals(elements[0].text, "投稿者: <@U123>\n編集者: <@U999>");
+});
+
+Deno.test("buildMarkdownBlocks: omits the editor line when editor equals poster", () => {
+  const blocks = buildMarkdownBlocks("# hi", "U123", "U123");
+  const elements = blocks[0].elements as Array<{ type: string; text: string }>;
+  assertEquals(elements[0].text, "投稿者: <@U123>");
+});

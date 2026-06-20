@@ -59,7 +59,8 @@ datastores/posted_messages.ts      # 監査ログ + 編集時の現在値ルッ�
 - OpenForm を使うため Workflow には `interactivity` 入力が必須。OpenForm は最初の
   ステップに置く。
 - 編集ボタンに継続応答するため、関数は `completed: false` で開いたままにする。
-- 編集権限は最初に投稿したユーザのみ。
+- 編集は誰でも可能（投稿者と異なる編集者はメッセージに併記される）。削除は最初に
+  投稿したユーザのみ。
 
 ## コード規約
 

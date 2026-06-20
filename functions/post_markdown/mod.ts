@@ -65,10 +65,20 @@ function pickMessageTsFromBody(body: unknown): string | undefined {
   return b.container?.message_ts ?? b.message?.ts;
 }
 
-// 編集・削除はどちらも「最初に投稿したユーザだけ」に許可する共通ガード。
-// thread_url 経由で別チャンネルに投稿された可能性があるため、対象の channel/ts は
-// inputs ではなく payload から取り出す。権限を満たさなければ ephemeral で通知し
-// null を返す（呼び出し側は null なら中断する）。
+// 操作対象メッセージの channel/ts を payload から取り出す。thread_url 経由で
+// 別チャンネルに投稿された可能性があるため、inputs ではなく payload を優先する。
+function resolveTarget(
+  body: unknown,
+  inputs: { channel: string },
+): { channel: string; ts: string } | null {
+  const channel = pickChannelFromBody(body, inputs.channel);
+  const ts = pickMessageTsFromBody(body);
+  if (!ts) return null;
+  return { channel, ts };
+}
+
+// 削除は破壊的なため「最初に投稿したユーザだけ」に許可する。権限を満たさなければ
+// ephemeral で通知し null を返す（編集は誰でも可なのでこのガードを通さない）。
 async function resolveOwnedTarget(
   // deno-lint-ignore no-explicit-any
   body: any,
@@ -76,19 +86,18 @@ async function resolveOwnedTarget(
   // deno-lint-ignore no-explicit-any
   client: any,
 ): Promise<{ channel: string; ts: string } | null> {
-  const channel = pickChannelFromBody(body, inputs.channel);
-  const ts = pickMessageTsFromBody(body);
-  if (!ts) return null;
+  const target = resolveTarget(body, inputs);
+  if (!target) return null;
 
   if (body.user.id !== inputs.submitted_by) {
     await client.chat.postEphemeral({
-      channel,
+      channel: target.channel,
       user: body.user.id,
-      text: "この操作ができるのは、最初に投稿したユーザだけです。",
+      text: "このメッセージを削除できるのは、最初に投稿したユーザだけです。",
     });
     return null;
   }
-  return { channel, ts };
+  return target;
 }
 
 // --- 編集モーダル ---
@@ -196,7 +205,8 @@ export default SlackFunction(
   .addBlockActionsHandler(
     EDIT_ACTION_ID,
     async ({ body, inputs, client }) => {
-      const target = await resolveOwnedTarget(body, inputs, client);
+      // 編集は投稿者以外にも許可する（編集者は投稿に併記される）。
+      const target = resolveTarget(body, inputs);
       if (!target) return;
       const { channel, ts } = target;
 
@@ -251,7 +261,8 @@ export default SlackFunction(
       const updated = await client.chat.update({
         channel: meta.channel,
         ts: meta.ts,
-        ...buildMarkdownMessage(newMarkdown, meta.posted_by),
+        // 投稿者は元のまま保ち、今回の編集者（body.user.id）を併記する。
+        ...buildMarkdownMessage(newMarkdown, meta.posted_by, body.user.id),
       });
 
       if (!updated.ok) {

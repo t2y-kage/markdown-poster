@@ -13,14 +13,20 @@ export type Block = { type: string; [key: string]: unknown };
 export function buildMarkdownBlocks(
   markdown: string,
   postedBy?: string,
+  editedBy?: string,
 ): Block[] {
   const blocks: Block[] = [];
   // 誰が投稿したか分かるよう、本文の前に投稿者を表示する。mrkdwn の <@U…> は
   // メンションとして確実にレンダリングされる（markdown ブロックの挙動に依らない）。
+  // 投稿者と異なるユーザが編集した場合は編集者も併記する。
   if (postedBy) {
+    let info = `投稿者: <@${postedBy}>`;
+    if (editedBy && editedBy !== postedBy) {
+      info += `\n編集者: <@${editedBy}>`;
+    }
     blocks.push({
       type: "context",
-      elements: [{ type: "mrkdwn", text: `投稿者: <@${postedBy}>` }],
+      elements: [{ type: "mrkdwn", text: info }],
     });
   }
   blocks.push({ type: "markdown", text: markdown });
@@ -65,12 +71,14 @@ export function buildFallbackText(markdown: string): string {
 export function buildMarkdownMessage(
   markdown: string,
   postedBy?: string,
+  editedBy?: string,
 ): { text: string; blocks: Record<string, unknown>[] } {
   return {
     text: buildFallbackText(markdown),
-    blocks: buildMarkdownBlocks(markdown, postedBy) as unknown as Record<
-      string,
-      unknown
-    >[],
+    blocks: buildMarkdownBlocks(
+      markdown,
+      postedBy,
+      editedBy,
+    ) as unknown as Record<string, unknown>[],
   };
 }
