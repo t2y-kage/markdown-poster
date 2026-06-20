@@ -44,10 +44,14 @@ triggers/post_markdown_trigger.ts  # Link(Shortcut) トリガー
 workflows/post_markdown.ts         # OpenForm → カスタム関数 の 2 ステップ
 functions/post_markdown/
   definition.ts   # 関数の入出力定義
-  mod.ts          # SlackFunction 本体 + 「編集」ボタンのハンドラ登録
-  blocks.ts       # Block Kit ペイロード組み立て（markdown ブロック）
+  mod.ts          # SlackFunction 本体 + 各ハンドラの登録（オーケストレーション）
+  blocks.ts       # Block Kit ペイロード組み立て（markdown / 投稿者 / 編集・削除ボタン）
+  file_source.ts  # 入力経路の XOR 解決 + 添付ファイルの DL/デコード + 長さガード
+  interaction.ts  # block_actions payload から channel/ts を取り出す + 権限ガード
+  edit_modal.ts   # 編集モーダルの組み立て・private_metadata 入出力・入力値取り出し
   thread_url.ts   # Slack メッセージ URL → channel/ts のパース
   audit_log.ts    # Datastore への書き込み・読み出し
+  client.ts       # SlackAPIClient の最小別名（ヘルパ間で共有）
   *_test.ts       # 純粋関数のユニットテスト
 datastores/posted_messages.ts      # 監査ログ + 編集時の現在値ルックアップ
 ```
@@ -61,6 +65,11 @@ datastores/posted_messages.ts      # 監査ログ + 編集時の現在値ルッ�
 - 編集ボタンに継続応答するため、関数は `completed: false` で開いたままにする。
 - 編集は誰でも可能（投稿者と異なる編集者はメッセージに併記される）。削除は最初に
   投稿したユーザのみ。
+- 入力経路は**直貼り（〜3,000字）か添付ファイル（〜12,000字）の XOR**。`mod.ts`
+  冒頭の `resolveSource` で本文文字列を確定させ、以降は経路に依らず共通。
+- 添付ファイルは `files.info` → `url_private_download` を bot token 付きで fetch し
+  UTF-8 デコードする（`files:read` スコープ + `files.slack.com` の outgoing domain
+  が必要）。
 
 ## コード規約
 
@@ -72,6 +81,12 @@ datastores/posted_messages.ts      # 監査ログ + 編集時の現在値ルッ�
 
 ## 注意点
 
-- OpenForm の文字列フィールドはおおむね 3,000 文字が上限。
+- OpenForm の文字列フィールド（直貼り）はおおむね 3,000 文字が上限。これを超える
+  長文はテキストファイルを添付し、`markdown` ブロックの上限 12,000 文字まで扱う。
+- 編集モーダルの `plain_text_input` は `max_length` が 3,000 まで（Slack の制約）。
+  そのため 3,000 字超の投稿は編集ボタンを出さず、その場では編集不可（再投稿で対応）。
+- 送信長エラー `msg_too_long` はバイト長で判定される。本文を通知用 `text`
+  フォールバックに丸ごと積むと多バイト文字で容易に超過するため、`blocks.ts` の
+  `buildFallbackText` は**バイト長**で短く切り詰めている。
 - Datastore は監査ログと編集時の現在値ルックアップを兼ねる。外す場合の手順は
   README の「監査ログ Datastore を使わない場合」を参照。

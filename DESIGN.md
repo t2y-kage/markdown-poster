@@ -47,9 +47,12 @@ Run on Slack の 3 要素（Trigger → Workflow → Function）で構成する�
 ```
 Link(Shortcut) Trigger
     └─ Workflow (interactivity 必須)
-         ├─ Step1: OpenForm        … Markdown + 投稿先チャンネルを収集
-         └─ Step2: Custom Function … markdown ブロックで chat.postMessage
-                                       （任意で Datastore に監査ログ保存）
+         ├─ Step1: OpenForm        … channel / markdown(直貼り) / file(添付) / thread_url
+         └─ Step2: Custom Function
+              ├─ resolveSource: 直貼り or 添付ファイル → Markdown 本文を確定
+              ├─ ファイルなら files.info→DL→UTF-8 デコード、12,000 字ガード
+              └─ markdown ブロックで chat.postMessage（任意で Datastore 保存）
+                   投稿後: 編集（誰でも可）/ 削除（投稿者のみ）に継続応答
 ```
 
 設計上の要点:
@@ -60,6 +63,9 @@ Link(Shortcut) Trigger
 - OpenForm を使うため Workflow には `interactivity` 入力が必須。フォームが意図せず
   開くのを防ぐ仕組みで、OpenForm は最初のステップに置く。
 - 起動チャンネルを投稿先の既定値としてトリガーから渡す。
+- **入力経路は直貼りと添付ファイルの XOR**。分岐は「Markdown 文字列を得る」冒頭の
+  `resolveSource` だけに閉じ込め、以降の経路（ブロック組み立て・投稿・編集・削除・
+  Datastore 保存）は本文文字列のみに依存し、入力経路には依らない。
 
 参照:
 
@@ -75,9 +81,11 @@ Link(Shortcut) Trigger
 
 - workflows / functions / datastores を登録。
 - botScopes:
-  - `chat:write` … メッセージ投稿
+  - `chat:write` … メッセージ投稿・編集・削除
   - `chat:write.public` … 未参加のパブリックチャンネルへも投稿可能にする
   - `datastore:read` / `datastore:write` … 監査ログ用（任意機能。不要なら削除）
+  - `files:read` … フォームに添付されたファイル本体の読み取り
+- outgoingDomains: `files.slack.com`（`url_private_download` の fetch に必要）
 
 ### triggers/post_markdown_trigger.ts
 
@@ -88,22 +96,40 @@ Link(Shortcut) Trigger
 ### workflows/post_markdown.ts
 
 - input_parameters: `interactivity`(必須), `channel`(任意)。
-- Step1 `Schema.slack.functions.OpenForm`:
+- Step1 `Schema.slack.functions.OpenForm`（`required` は `channel` のみ。
+  markdown / file は関数内で XOR 検証するため任意）:
   - `channel`: channel_id（既定値 = トリガーの channel）
-  - `markdown`: string, `long: true`（複数行入力）
-- Step2 カスタムファンクション: `channel`, `markdown`, `submitted_by` を渡す。
+  - `markdown`: string, `long: true`, `maxLength: 3000`（直貼り）
+  - `file`: array of `file_id`, `maxItems: 1`（テキストファイル添付）
+  - `thread_url`: string（任意）
+- Step2 カスタムファンクション: `channel`, `markdown`, `file`, `thread_url`,
+  `submitted_by` を渡す。
 
 ### functions/post_markdown/definition.ts
 
-- inputs: `channel`(channel_id), `markdown`(string), `submitted_by`(user_id)
-- outputs: `ts`(string)
+- inputs: `channel`(channel_id), `markdown`(string), `file`(array of file_id),
+  `submitted_by`(user_id), `thread_url`(string)。`markdown` と `file` は排他のため
+  `required` には入れない。
 
-### functions/post_markdown/mod.ts
+### functions/post_markdown/mod.ts ほか
 
-- `client.chat.postMessage` に `blocks: [{ type: "markdown", text: markdown }]` と
-  フォールバック `text` を渡す。
-- 投稿成功後、任意で Datastore に監査ログを put（失敗してもログのみで投稿成否に
-  影響させない）。
+- `mod.ts` はオーケストレーションに専念。`resolveSource`（`file_source.ts`）で
+  本文を確定し、`client.chat.postMessage` に `markdown` ブロック + 投稿者 context
+  ブロック + 編集/削除ボタンを渡す。投稿成功後、任意で Datastore に監査ログを put
+  （失敗してもログのみで投稿成否に影響させない）。
+- ヘルパは関心事ごとに分割: `file_source.ts`（入力経路の解決・DL・長さガード）、
+  `interaction.ts`（payload 取り出し・権限ガード）、`edit_modal.ts`（編集モーダル）、
+  `blocks.ts`（ペイロード組み立て）、`client.ts`（SlackAPIClient の最小別名）。
+- 通知用フォールバック `text` は**バイト長**で短く切り詰める（`buildFallbackText`）。
+  本文を丸ごと積むと多バイト文字で `msg_too_long` を誘発するため。
+
+### 投稿後の操作（編集・削除・投稿者表示）
+
+- 投稿の先頭に `投稿者: @user` を context ブロックで表示。別ユーザが編集した場合は
+  `編集者: @user` を併記（元投稿者は private_metadata で引き回し不変に保つ）。
+- **編集は誰でも可**、**削除は最初に投稿したユーザのみ**。
+- 編集モーダルの `plain_text_input` は `max_length` 3,000 が上限（Slack 制約）。
+  3,000 字超の投稿には編集ボタンを出さず、その場では編集不可（再投稿で対応）。
 
 ### datastores/posted_messages.ts（任意）
 
@@ -123,7 +149,15 @@ markdown-poster/
 ├── functions/
 │   └── post_markdown/
 │       ├── definition.ts
-│       └── mod.ts
+│       ├── mod.ts             # SlackFunction + ハンドラ登録
+│       ├── blocks.ts          # Block Kit 組み立て
+│       ├── file_source.ts     # 入力経路の解決・ファイル DL・長さガード
+│       ├── interaction.ts     # payload 取り出し・権限ガード
+│       ├── edit_modal.ts      # 編集モーダル
+│       ├── thread_url.ts      # メッセージ URL のパース
+│       ├── audit_log.ts       # Datastore 入出力
+│       ├── client.ts          # SlackAPIClient の最小別名
+│       └── *_test.ts          # 純粋関数のユニットテスト
 ├── triggers/
 │   └── post_markdown_trigger.ts
 ├── datastores/
@@ -145,9 +179,14 @@ markdown-poster/
 - **markdown ブロックの型**: `deno-slack-sdk` の型定義が `markdown` ブロックに
   未追随の場合、`type: "markdown"` で型エラーになり得る。回避策は (a) blocks を
   キャスト、または (b) `client.apiCall("chat.postMessage", {...})` を使う。
-- **文字数上限の不一致**: OpenForm の文字列フィールドはおおむね 3,000 文字が上限。
-  一方 `markdown` ブロックは 1 ペイロード合計 12,000 文字まで。大きな Markdown は
-  フォーム入力では収まらないため、分割するか外部 Webhook トリガー版を検討。
+- **文字数上限の不一致**: OpenForm の文字列フィールド（直貼り）はおおむね 3,000
+  文字が上限。一方 `markdown` ブロックは 1 ペイロード合計 12,000 文字まで。両者の
+  差は**テキストファイル添付**で埋める（添付経路は 12,000 文字まで、超過は拒否）。
+- **編集モーダルの上限**: `plain_text_input` の `max_length` は 3,000 が上限
+  （超えると `views.open` が `invalid_arguments`）。3,000 字超の投稿は編集不可。
+- **バイト長と `msg_too_long`**: 送信長制限はバイト長で判定される。多バイト文字
+  （日本語など）は 1 文字 ≈ 3 バイトで、文字数の見た目より早く上限に当たる。通知用
+  `text` フォールバックはバイト長で切り詰める。
 - **タイムアウト**: デプロイ済みファンクションは 60 秒、View インタラクションは 10 秒。
 - **レンダリング確認**: `markdown` ブロックのテーブル描画は対象クライアント／
   ワークスペースで実機確認する。
@@ -202,8 +241,9 @@ slack trigger create --trigger-def triggers/post_markdown_trigger.ts
 
 ## 10. 将来拡張
 
-- **外部 Webhook トリガー版**: フォームを介さず JSON で Markdown を投入。フォームの
-  文字数制限を回避でき、TDnet 通知のような自動連携に向く。
+- **外部 Webhook トリガー版**: フォームを介さず JSON で Markdown を投入。TDnet 通知
+  のような自動連携（人手 UX 不要なケース）に向く。なお直貼りの文字数制限は
+  ファイル添付で回避済みのため、Webhook はあくまで自動連携用途として位置づける。
 - **table / data_table ブロック版**: 列揃え・リンク・ソート等が必要になった場合。
 - **GitHub Actions による CI/CD**: トークンを Secrets に登録し、push 契機で
   `slack deploy` を自動実行。認証情報をチャットに出さずに自動化できる。
