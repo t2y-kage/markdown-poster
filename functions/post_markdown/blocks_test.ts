@@ -4,6 +4,7 @@ import {
   buildMarkdownBlocks,
   DELETE_ACTION_ID,
   EDIT_ACTION_ID,
+  EDITABLE_MAX_LEN,
 } from "./blocks.ts";
 
 Deno.test("buildFallbackText: short text is returned unchanged", () => {
@@ -31,6 +32,20 @@ Deno.test("buildMarkdownBlocks: emits a markdown block followed by an edit actio
   const elements = blocks[1].elements as Array<{ action_id: string }>;
   assertEquals(elements[0].action_id, EDIT_ACTION_ID);
   assertEquals(elements[1].action_id, DELETE_ACTION_ID);
+});
+
+Deno.test("buildMarkdownBlocks: hides the edit button when over the editable cap", () => {
+  const blocks = buildMarkdownBlocks("x".repeat(EDITABLE_MAX_LEN + 1));
+  const elements = blocks[1].elements as Array<{ action_id: string }>;
+  // 編集ボタンは出さず、削除ボタンのみ。
+  assertEquals(elements.length, 1);
+  assertEquals(elements[0].action_id, DELETE_ACTION_ID);
+});
+
+Deno.test("buildMarkdownBlocks: keeps the edit button at exactly the editable cap", () => {
+  const blocks = buildMarkdownBlocks("x".repeat(EDITABLE_MAX_LEN));
+  const elements = blocks[1].elements as Array<{ action_id: string }>;
+  assertEquals(elements[0].action_id, EDIT_ACTION_ID);
 });
 
 Deno.test("buildMarkdownBlocks: prepends a poster context block when postedBy is given", () => {

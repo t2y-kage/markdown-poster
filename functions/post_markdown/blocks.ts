@@ -8,6 +8,10 @@ const EDIT_BLOCK_ID = "edit_actions";
 // text は通知・検索用のフォールバック。保守的な上限で切り詰める。
 const FALLBACK_MAX_LEN = 3000;
 
+// 編集モーダルの入力欄（plain_text_input）は 3,000 字までしか保持できない
+// （Slack の制約）。これを超える本文は編集できないため、編集ボタン自体を出さない。
+export const EDITABLE_MAX_LEN = 3000;
+
 export type Block = { type: string; [key: string]: unknown };
 
 export function buildMarkdownBlocks(
@@ -30,34 +34,33 @@ export function buildMarkdownBlocks(
     });
   }
   blocks.push({ type: "markdown", text: markdown });
-  blocks.push({
-    type: "actions",
-    block_id: EDIT_BLOCK_ID,
-    elements: [
-      {
-        type: "button",
-        action_id: EDIT_ACTION_ID,
-        text: { type: "plain_text", text: "編集" },
+  // 3,000 字を超える本文は編集モーダルで扱えないため、編集ボタンを出さない。
+  const elements: Block[] = [];
+  if (markdown.length <= EDITABLE_MAX_LEN) {
+    elements.push({
+      type: "button",
+      action_id: EDIT_ACTION_ID,
+      text: { type: "plain_text", text: "編集" },
+    });
+  }
+  elements.push({
+    type: "button",
+    action_id: DELETE_ACTION_ID,
+    style: "danger",
+    text: { type: "plain_text", text: "削除" },
+    // 誤クリック防止に確認ダイアログを挟む。削除は元に戻せない。
+    confirm: {
+      title: { type: "plain_text", text: "メッセージを削除" },
+      text: {
+        type: "plain_text",
+        text: "この投稿を削除します。元に戻せません。",
       },
-      {
-        type: "button",
-        action_id: DELETE_ACTION_ID,
-        style: "danger",
-        text: { type: "plain_text", text: "削除" },
-        // 誤クリック防止に確認ダイアログを挟む。削除は元に戻せない。
-        confirm: {
-          title: { type: "plain_text", text: "メッセージを削除" },
-          text: {
-            type: "plain_text",
-            text: "この投稿を削除します。元に戻せません。",
-          },
-          confirm: { type: "plain_text", text: "削除" },
-          deny: { type: "plain_text", text: "キャンセル" },
-          style: "danger",
-        },
-      },
-    ],
+      confirm: { type: "plain_text", text: "削除" },
+      deny: { type: "plain_text", text: "キャンセル" },
+      style: "danger",
+    },
   });
+  blocks.push({ type: "actions", block_id: EDIT_BLOCK_ID, elements });
   return blocks;
 }
 
