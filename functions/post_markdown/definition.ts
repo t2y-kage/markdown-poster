@@ -1,11 +1,11 @@
 import { DefineFunction, Schema } from "deno-slack-sdk/mod.ts";
 
-export const PostMarkdownTableDefinition = DefineFunction({
-  callback_id: "post_markdown_table",
-  title: "Post markdown table",
+export const PostMarkdownDefinition = DefineFunction({
+  callback_id: "post_markdown",
+  title: "Post markdown",
   description:
-    "Post a Markdown table as a rich table. Optionally post as a thread reply when thread_url is provided.",
-  source_file: "functions/post_markdown_table/mod.ts",
+    "Post Markdown as a rich message. Optionally post as a thread reply when thread_url is provided.",
+  source_file: "functions/post_markdown/mod.ts",
   input_parameters: {
     properties: {
       channel: {
@@ -14,7 +14,7 @@ export const PostMarkdownTableDefinition = DefineFunction({
       },
       markdown: {
         type: Schema.types.string,
-        description: "Markdown text (typically a table)",
+        description: "Markdown text",
       },
       submitted_by: {
         type: Schema.slack.types.user_id,

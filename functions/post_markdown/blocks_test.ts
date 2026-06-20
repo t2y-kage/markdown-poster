@@ -1,7 +1,7 @@
 import { assertEquals } from "@std/assert";
 import {
   buildFallbackText,
-  buildTableBlocks,
+  buildMarkdownBlocks,
   EDIT_ACTION_ID,
 } from "./blocks.ts";
 
@@ -22,8 +22,8 @@ Deno.test("buildFallbackText: text at/over the cap is truncated to 3000 chars en
   assertEquals(truncated.slice(0, -1), "x".repeat(2999));
 });
 
-Deno.test("buildTableBlocks: emits a markdown block followed by an edit actions block", () => {
-  const blocks = buildTableBlocks("| a |\n| --- |\n| 1 |");
+Deno.test("buildMarkdownBlocks: emits a markdown block followed by an edit actions block", () => {
+  const blocks = buildMarkdownBlocks("| a |\n| --- |\n| 1 |");
   assertEquals(blocks[0].type, "markdown");
   assertEquals(blocks[0].text, "| a |\n| --- |\n| 1 |");
   assertEquals(blocks[1].type, "actions");

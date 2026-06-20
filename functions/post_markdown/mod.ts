@@ -1,10 +1,10 @@
 import { SlackFunction } from "deno-slack-sdk/mod.ts";
-import { PostMarkdownTableDefinition } from "./definition.ts";
-import { buildTableMessage, EDIT_ACTION_ID } from "./blocks.ts";
+import { PostMarkdownDefinition } from "./definition.ts";
+import { buildMarkdownMessage, EDIT_ACTION_ID } from "./blocks.ts";
 import { parseThreadUrl } from "./thread_url.ts";
 import { fetchLatestMarkdown, recordPost } from "./audit_log.ts";
 
-const EDIT_MODAL_CALLBACK_ID = "edit_markdown_table_modal";
+const EDIT_MODAL_CALLBACK_ID = "edit_markdown_modal";
 const MARKDOWN_INPUT_BLOCK_ID = "markdown_input_block";
 const MARKDOWN_INPUT_ACTION_ID = "markdown_input";
 
@@ -76,7 +76,7 @@ function buildEditModalView(meta: EditMeta, initialValue: string) {
     type: "modal",
     callback_id: EDIT_MODAL_CALLBACK_ID,
     private_metadata: JSON.stringify(meta),
-    title: { type: "plain_text", text: "テーブルを編集" },
+    title: { type: "plain_text", text: "Markdown を編集" },
     submit: { type: "plain_text", text: "更新" },
     close: { type: "plain_text", text: "キャンセル" },
     blocks: [
@@ -98,7 +98,7 @@ function buildEditModalView(meta: EditMeta, initialValue: string) {
 // --- SlackFunction 定義 ---
 
 export default SlackFunction(
-  PostMarkdownTableDefinition,
+  PostMarkdownDefinition,
   async ({ inputs, client }) => {
     const { channel, markdown, submitted_by, thread_url } = inputs;
 
@@ -107,7 +107,7 @@ export default SlackFunction(
 
     const response = await client.chat.postMessage({
       channel: target.channel,
-      ...buildTableMessage(markdown),
+      ...buildMarkdownMessage(markdown),
       ...(target.thread_ts ? { thread_ts: target.thread_ts } : {}),
     });
 
@@ -182,7 +182,7 @@ export default SlackFunction(
       const updated = await client.chat.update({
         channel: meta.channel,
         ts: meta.ts,
-        ...buildTableMessage(newMarkdown),
+        ...buildMarkdownMessage(newMarkdown),
       });
 
       if (!updated.ok) {
