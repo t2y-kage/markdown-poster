@@ -22,7 +22,10 @@ const formStep = PostMarkdownWorkflow.addStep(
     description: "Paste Markdown to post it as a rich message.",
     interactivity: PostMarkdownWorkflow.inputs.interactivity,
     fields: {
-      required: ["channel", "markdown"],
+      // markdown 直貼りと file 添付は排他（XOR）。どちらか一方を求めるが
+      // OpenForm の required はフィールド単位でしか書けないため、両方を任意に
+      // して関数内で XOR を検証する。
+      required: ["channel"],
       elements: [
         {
           name: "channel",
@@ -39,12 +42,23 @@ const formStep = PostMarkdownWorkflow.addStep(
         },
         {
           name: "markdown",
-          title: "Markdown",
+          title: "Markdown（直貼り）",
+          description:
+            "短い Markdown はここに貼り付け（〜3,000字）。長文はファイル添付を使ってください。",
           type: Schema.types.string,
           long: true,
           // markdown ブロックの上限に合わせる。超過時はフォーム送信が
           // バリデーションエラーでブロックされる（サイレント切り捨てを防ぐ）。
           maxLength: 3000,
+        },
+        {
+          name: "file",
+          title: "Markdown ファイル（添付）",
+          description:
+            "長文 Markdown はテキストファイルとして添付（〜12,000字）。直貼りと同時には使えません。",
+          type: Schema.types.array,
+          items: { type: Schema.slack.types.file_id },
+          maxItems: 1,
         },
       ],
     },
@@ -54,6 +68,7 @@ const formStep = PostMarkdownWorkflow.addStep(
 PostMarkdownWorkflow.addStep(PostMarkdownDefinition, {
   channel: formStep.outputs.fields.channel,
   markdown: formStep.outputs.fields.markdown,
+  file: formStep.outputs.fields.file,
   thread_url: formStep.outputs.fields.thread_url,
   submitted_by: PostMarkdownWorkflow.inputs.interactivity.interactor.id,
 });

@@ -1,12 +1,26 @@
 import { SlackFunction } from "deno-slack-sdk/mod.ts";
 import { PostMarkdownDefinition } from "./definition.ts";
-import { buildMarkdownMessage, EDIT_ACTION_ID } from "./blocks.ts";
+import {
+  buildMarkdownMessage,
+  DELETE_ACTION_ID,
+  EDIT_ACTION_ID,
+  EDITABLE_MAX_LEN,
+} from "./blocks.ts";
 import { parseThreadUrl } from "./thread_url.ts";
 import { fetchLatestMarkdown, recordPost } from "./audit_log.ts";
-
-const EDIT_MODAL_CALLBACK_ID = "edit_markdown_modal";
-const MARKDOWN_INPUT_BLOCK_ID = "markdown_input_block";
-const MARKDOWN_INPUT_ACTION_ID = "markdown_input";
+import {
+  downloadFileText,
+  enforceLengthLimit,
+  resolveSource,
+} from "./file_source.ts";
+import { resolveOwnedTarget, resolveTarget } from "./interaction.ts";
+import {
+  buildEditModalView,
+  EDIT_MODAL_CALLBACK_ID,
+  inputErrorResponse,
+  parseEditMeta,
+  readMarkdownInput,
+} from "./edit_modal.ts";
 
 // --- 投稿先決定 ---
 
@@ -30,98 +44,56 @@ function resolvePostTarget(
   return { channel: parsed.channel, thread_ts: parsed.thread_ts };
 }
 
-// --- インタラクション payload 取り出し ---
-
-// block_actions payload は deno-slack-sdk の body 型に一部フィールドが現れないので、
-// ここで構造アサーションを集約する。
-type ActionBodyShape = {
-  channel?: { id?: string };
-  container?: { channel_id?: string; message_ts?: string };
-  message?: { ts?: string };
-};
-
-function pickChannelFromBody(body: unknown, fallback: string): string {
-  const b = body as ActionBodyShape;
-  return b.channel?.id ?? b.container?.channel_id ?? fallback;
-}
-
-function pickMessageTsFromBody(body: unknown): string | undefined {
-  const b = body as ActionBodyShape;
-  return b.container?.message_ts ?? b.message?.ts;
-}
-
-// --- 編集モーダル ---
-
-type EditMeta = { channel: string; ts: string };
-
-function parseEditMeta(raw: string | undefined): EditMeta | null {
-  try {
-    const meta = JSON.parse(raw ?? "{}") as Partial<EditMeta>;
-    if (typeof meta.channel === "string" && typeof meta.ts === "string") {
-      return { channel: meta.channel, ts: meta.ts };
-    }
-  } catch { /* fall through */ }
-  return null;
-}
-
-function inputErrorResponse(message: string) {
-  return {
-    response_action: "errors" as const,
-    errors: { [MARKDOWN_INPUT_BLOCK_ID]: message },
-  };
-}
-
-function buildEditModalView(meta: EditMeta, initialValue: string) {
-  return {
-    type: "modal",
-    callback_id: EDIT_MODAL_CALLBACK_ID,
-    private_metadata: JSON.stringify(meta),
-    title: { type: "plain_text", text: "Markdown を編集" },
-    submit: { type: "plain_text", text: "更新" },
-    close: { type: "plain_text", text: "キャンセル" },
-    blocks: [
-      {
-        type: "input",
-        block_id: MARKDOWN_INPUT_BLOCK_ID,
-        label: { type: "plain_text", text: "Markdown" },
-        element: {
-          type: "plain_text_input",
-          action_id: MARKDOWN_INPUT_ACTION_ID,
-          multiline: true,
-          initial_value: initialValue,
-          // 投稿フォームと同じ上限。超過時はモーダル送信がブロックされる。
-          max_length: 3000,
-        },
-      },
-    ],
-  };
+// Slack の送信長エラーは生のコードだと分かりにくいので、原因と対処を案内する。
+// 多バイト文字はバイト長が膨らみ、文字数の見た目より早く上限に当たる。
+function describePostError(error: string | undefined): string {
+  if (error === "msg_too_long" || error === "msg_blocks_too_long") {
+    return "内容が Slack のメッセージ上限を超えました（日本語など多バイト文字は見た目の文字数より大きくなります）。文字数を減らすか、不要な行を削ってください。";
+  }
+  return `投稿に失敗しました: ${error ?? "unknown error"}`;
 }
 
 // --- SlackFunction 定義 ---
 
 export default SlackFunction(
   PostMarkdownDefinition,
-  async ({ inputs, client }) => {
-    const { channel, markdown, submitted_by, thread_url } = inputs;
+  async ({ inputs, client, token }) => {
+    const { channel, markdown, file, submitted_by, thread_url } = inputs;
+
+    // 直貼り / ファイル添付のどちらかから Markdown 本文を確定させる。
+    // ここから先の経路は本文文字列のみに依存し、入力経路には依らない。
+    const source = resolveSource({ markdown, file });
+    if (source.kind === "error") return { error: source.message };
+
+    let text: string;
+    if (source.kind === "file") {
+      const downloaded = await downloadFileText(client, token, source.fileId);
+      if (!downloaded.ok) return { error: downloaded.message };
+      text = downloaded.text;
+    } else {
+      text = source.markdown;
+    }
+
+    const limited = enforceLengthLimit(text);
+    if (!limited.ok) return { error: limited.message };
+    text = limited.text;
 
     const target = resolvePostTarget(channel, thread_url);
     if ("error" in target) return target;
 
     const response = await client.chat.postMessage({
       channel: target.channel,
-      ...buildMarkdownMessage(markdown),
+      ...buildMarkdownMessage(text, submitted_by),
       ...(target.thread_ts ? { thread_ts: target.thread_ts } : {}),
     });
 
     if (!response.ok) {
-      return {
-        error: `chat.postMessage failed: ${response.error ?? "unknown error"}`,
-      };
+      return { error: describePostError(response.error) };
     }
 
     await recordPost(client, {
       channel: target.channel,
-      markdown,
+      markdown: text,
       submitted_by,
       posted_ts: String(response.ts),
     });
@@ -133,27 +105,32 @@ export default SlackFunction(
   .addBlockActionsHandler(
     EDIT_ACTION_ID,
     async ({ body, inputs, client }) => {
-      // thread_url 経由で別チャンネルに投稿された可能性があるため、
-      // 編集対象のチャンネル/ts は inputs ではなく payload から取り出す。
-      const channel = pickChannelFromBody(body, inputs.channel);
-      const ts = pickMessageTsFromBody(body);
-      if (!ts) return;
+      // 編集は投稿者以外にも許可する（編集者は投稿に併記される）。
+      const target = resolveTarget(body, inputs);
+      if (!target) return;
+      const { channel, ts } = target;
 
-      if (body.user.id !== inputs.submitted_by) {
+      const currentMarkdown = await fetchLatestMarkdown(client, ts);
+
+      // 通常は 3,000 字超の投稿では編集ボタン自体を出さないが、防御的に再確認する。
+      // 入力欄は 3,000 字までしか保持できないため、超過分は案内して中断する。
+      if (currentMarkdown.length > EDITABLE_MAX_LEN) {
         await client.chat.postEphemeral({
           channel,
           user: body.user.id,
-          text: "この投稿を編集できるのは、最初に投稿したユーザだけです。",
+          text:
+            `この投稿は ${currentMarkdown.length} 字あり、編集モーダルの上限（${EDITABLE_MAX_LEN} 字）を超えるため、その場では編集できません。修正版を Markdown ファイルとして貼り直してください。`,
         });
         return;
       }
 
-      const currentMarkdown = await fetchLatestMarkdown(client, ts);
-
       const view = await client.views.open({
         // Run on Slack では trigger_id ではなく interactivity_pointer を渡す
         trigger_id: body.interactivity.interactivity_pointer,
-        view: buildEditModalView({ channel, ts }, currentMarkdown),
+        view: buildEditModalView(
+          { channel, ts, posted_by: inputs.submitted_by },
+          currentMarkdown,
+        ),
       });
 
       if (!view.ok) {
@@ -175,8 +152,7 @@ export default SlackFunction(
         return inputErrorResponse("メタデータの解析に失敗しました。");
       }
 
-      const newMarkdown = view.state.values
-        ?.[MARKDOWN_INPUT_BLOCK_ID]?.[MARKDOWN_INPUT_ACTION_ID]?.value ?? "";
+      const newMarkdown = readMarkdownInput(view);
       if (newMarkdown.trim() === "") {
         return inputErrorResponse("Markdown を入力してください。");
       }
@@ -184,13 +160,12 @@ export default SlackFunction(
       const updated = await client.chat.update({
         channel: meta.channel,
         ts: meta.ts,
-        ...buildMarkdownMessage(newMarkdown),
+        // 投稿者は元のまま保ち、今回の編集者（body.user.id）を併記する。
+        ...buildMarkdownMessage(newMarkdown, meta.posted_by, body.user.id),
       });
 
       if (!updated.ok) {
-        return inputErrorResponse(
-          `更新に失敗しました: ${updated.error ?? "unknown error"}`,
-        );
+        return inputErrorResponse(describePostError(updated.error));
       }
 
       await recordPost(client, {
@@ -201,5 +176,25 @@ export default SlackFunction(
       });
 
       // 何も返さなければ Slack 側でモーダルが閉じる。関数は引き続き開いておく。
+    },
+  )
+  .addBlockActionsHandler(
+    DELETE_ACTION_ID,
+    async ({ body, inputs, client }) => {
+      const target = await resolveOwnedTarget(body, inputs, client);
+      if (!target) return;
+
+      // bot が投稿したメッセージなので chat:write の範囲で削除できる。
+      const deleted = await client.chat.delete({
+        channel: target.channel,
+        ts: target.ts,
+      });
+      await client.chat.postEphemeral({
+        channel: target.channel,
+        user: body.user.id,
+        text: deleted.ok
+          ? "メッセージを削除しました。"
+          : `削除に失敗しました: ${deleted.error ?? "unknown error"}`,
+      });
     },
   );

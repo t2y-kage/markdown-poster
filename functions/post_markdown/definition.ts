@@ -14,7 +14,13 @@ export const PostMarkdownDefinition = DefineFunction({
       },
       markdown: {
         type: Schema.types.string,
-        description: "Markdown text",
+        description: "Markdown text (direct paste). Empty when a file is used.",
+      },
+      file: {
+        type: Schema.types.array,
+        items: { type: Schema.slack.types.file_id },
+        description:
+          "Optional uploaded file whose text content is used as Markdown. Mutually exclusive with markdown.",
       },
       submitted_by: {
         type: Schema.slack.types.user_id,
@@ -26,6 +32,8 @@ export const PostMarkdownDefinition = DefineFunction({
           "Optional Slack message URL. When provided, post is threaded under that message and the channel is overridden by the URL.",
       },
     },
-    required: ["channel", "markdown", "submitted_by"],
+    // markdown と file は排他（XOR）。どちらか一方が必須なため required には
+    // 含めず、関数内で検証する。
+    required: ["channel", "submitted_by"],
   },
 });
