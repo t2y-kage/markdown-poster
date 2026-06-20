@@ -120,6 +120,15 @@ function inputErrorResponse(message: string) {
   };
 }
 
+// Slack の送信長エラーは生のコードだと分かりにくいので、原因と対処を案内する。
+// 多バイト文字はバイト長が膨らみ、文字数の見た目より早く上限に当たる。
+function describePostError(error: string | undefined): string {
+  if (error === "msg_too_long" || error === "msg_blocks_too_long") {
+    return "内容が Slack のメッセージ上限を超えました（日本語など多バイト文字は見た目の文字数より大きくなります）。文字数を減らすか、不要な行を削ってください。";
+  }
+  return `投稿に失敗しました: ${error ?? "unknown error"}`;
+}
+
 function buildEditModalView(meta: EditMeta, initialValue: string) {
   return {
     type: "modal",
@@ -181,9 +190,7 @@ export default SlackFunction(
     });
 
     if (!response.ok) {
-      return {
-        error: `chat.postMessage failed: ${response.error ?? "unknown error"}`,
-      };
+      return { error: describePostError(response.error) };
     }
 
     await recordPost(client, {
@@ -261,9 +268,7 @@ export default SlackFunction(
       });
 
       if (!updated.ok) {
-        return inputErrorResponse(
-          `更新に失敗しました: ${updated.error ?? "unknown error"}`,
-        );
+        return inputErrorResponse(describePostError(updated.error));
       }
 
       await recordPost(client, {

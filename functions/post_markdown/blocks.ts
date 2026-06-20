@@ -5,8 +5,11 @@ export const EDIT_ACTION_ID = "edit_markdown";
 export const DELETE_ACTION_ID = "delete_markdown";
 const EDIT_BLOCK_ID = "edit_actions";
 
-// text は通知・検索用のフォールバック。保守的な上限で切り詰める。
-const FALLBACK_MAX_LEN = 3000;
+// text は通知・検索用のフォールバック。本文は markdown ブロックが持つので、
+// ここは短くてよい。多バイト文字（日本語など）は 1 文字が複数バイトになり、
+// 文字数ではなくバイト長で Slack の送信上限（msg_too_long）に当たるため、
+// 文字数ではなくバイト長で控えめに切り詰める。
+export const FALLBACK_MAX_BYTES = 2000;
 
 // 編集モーダルの入力欄（plain_text_input）は 3,000 字までしか保持できない
 // （Slack の制約）。これを超える本文は編集できないため、編集ボタン自体を出さない。
@@ -65,8 +68,22 @@ export function buildMarkdownBlocks(
 }
 
 export function buildFallbackText(markdown: string): string {
-  if (markdown.length < FALLBACK_MAX_LEN) return markdown;
-  return `${markdown.slice(0, FALLBACK_MAX_LEN - 1)}…`;
+  const encoder = new TextEncoder();
+  if (encoder.encode(markdown).length <= FALLBACK_MAX_BYTES) return markdown;
+
+  // バイト予算に収まるまで 1 文字（コードポイント）ずつ積む。多バイト文字の
+  // 途中で切らないよう for...of で反復する。末尾の「…」分のバイトを残しておく。
+  const ellipsis = "…";
+  const budget = FALLBACK_MAX_BYTES - encoder.encode(ellipsis).length;
+  let bytes = 0;
+  let out = "";
+  for (const ch of markdown) {
+    const n = encoder.encode(ch).length;
+    if (bytes + n > budget) break;
+    out += ch;
+    bytes += n;
+  }
+  return out + ellipsis;
 }
 
 // chat.postMessage / chat.update に渡す { text, blocks }。

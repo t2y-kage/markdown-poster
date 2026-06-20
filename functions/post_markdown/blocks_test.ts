@@ -1,27 +1,33 @@
-import { assertEquals } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import {
   buildFallbackText,
   buildMarkdownBlocks,
   DELETE_ACTION_ID,
   EDIT_ACTION_ID,
   EDITABLE_MAX_LEN,
+  FALLBACK_MAX_BYTES,
 } from "./blocks.ts";
+
+const utf8 = new TextEncoder();
 
 Deno.test("buildFallbackText: short text is returned unchanged", () => {
   const md = "| a | b |\n| --- | --- |\n| 1 | 2 |";
   assertEquals(buildFallbackText(md), md);
 });
 
-Deno.test("buildFallbackText: text shorter than the cap keeps its trailing char", () => {
-  const md = "x".repeat(2999);
-  assertEquals(buildFallbackText(md), md);
+Deno.test("buildFallbackText: long ASCII text is byte-capped and ends in …", () => {
+  const out = buildFallbackText("x".repeat(5000));
+  assert(utf8.encode(out).length <= FALLBACK_MAX_BYTES);
+  assertEquals(out.endsWith("…"), true);
 });
 
-Deno.test("buildFallbackText: text at/over the cap is truncated to 3000 chars ending in …", () => {
-  const truncated = buildFallbackText("x".repeat(5000));
-  assertEquals(truncated.length, 3000);
-  assertEquals(truncated.endsWith("…"), true);
-  assertEquals(truncated.slice(0, -1), "x".repeat(2999));
+Deno.test("buildFallbackText: multibyte text is capped by bytes, not chars", () => {
+  // 日本語 1 文字 = 3 バイト。1000 文字 = 3000 バイトで上限を超えるため切り詰められる。
+  const out = buildFallbackText("あ".repeat(1000));
+  assert(utf8.encode(out).length <= FALLBACK_MAX_BYTES);
+  assertEquals(out.endsWith("…"), true);
+  // マルチバイト文字の途中で切れていない（デコード可能な文字列のまま）。
+  assert(out.length < 1000);
 });
 
 Deno.test("buildMarkdownBlocks: emits a markdown block followed by an edit actions block", () => {
