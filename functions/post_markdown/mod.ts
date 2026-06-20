@@ -3,6 +3,11 @@ import { PostMarkdownDefinition } from "./definition.ts";
 import { buildMarkdownMessage, EDIT_ACTION_ID } from "./blocks.ts";
 import { parseThreadUrl } from "./thread_url.ts";
 import { fetchLatestMarkdown, recordPost } from "./audit_log.ts";
+import {
+  downloadFileText,
+  enforceLengthLimit,
+  resolveSource,
+} from "./file_source.ts";
 
 const EDIT_MODAL_CALLBACK_ID = "edit_markdown_modal";
 const MARKDOWN_INPUT_BLOCK_ID = "markdown_input_block";
@@ -89,8 +94,9 @@ function buildEditModalView(meta: EditMeta, initialValue: string) {
           action_id: MARKDOWN_INPUT_ACTION_ID,
           multiline: true,
           initial_value: initialValue,
-          // 投稿フォームと同じ上限。超過時はモーダル送信がブロックされる。
-          max_length: 3000,
+          // markdown ブロックの上限に合わせる。ファイル経由の長文（〜12,000字）も
+          // 編集できるようにするため、直貼りフォームの 3,000 字ではなくこちらに揃える。
+          max_length: 12000,
         },
       },
     ],
@@ -101,15 +107,33 @@ function buildEditModalView(meta: EditMeta, initialValue: string) {
 
 export default SlackFunction(
   PostMarkdownDefinition,
-  async ({ inputs, client }) => {
-    const { channel, markdown, submitted_by, thread_url } = inputs;
+  async ({ inputs, client, token }) => {
+    const { channel, markdown, file, submitted_by, thread_url } = inputs;
+
+    // 直貼り / ファイル添付のどちらかから Markdown 本文を確定させる。
+    // ここから先の経路は本文文字列のみに依存し、入力経路には依らない。
+    const source = resolveSource({ markdown, file });
+    if (source.kind === "error") return { error: source.message };
+
+    let text: string;
+    if (source.kind === "file") {
+      const downloaded = await downloadFileText(client, token, source.fileId);
+      if (!downloaded.ok) return { error: downloaded.message };
+      text = downloaded.text;
+    } else {
+      text = source.markdown;
+    }
+
+    const limited = enforceLengthLimit(text);
+    if (!limited.ok) return { error: limited.message };
+    text = limited.text;
 
     const target = resolvePostTarget(channel, thread_url);
     if ("error" in target) return target;
 
     const response = await client.chat.postMessage({
       channel: target.channel,
-      ...buildMarkdownMessage(markdown),
+      ...buildMarkdownMessage(text),
       ...(target.thread_ts ? { thread_ts: target.thread_ts } : {}),
     });
 
@@ -121,7 +145,7 @@ export default SlackFunction(
 
     await recordPost(client, {
       channel: target.channel,
-      markdown,
+      markdown: text,
       submitted_by,
       posted_ts: String(response.ts),
     });

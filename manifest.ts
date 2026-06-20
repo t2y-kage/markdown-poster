@@ -10,11 +10,14 @@ export default Manifest({
   workflows: [PostMarkdownWorkflow],
   functions: [PostMarkdownDefinition],
   datastores: [PostedMessagesDatastore],
-  outgoingDomains: [],
+  // 添付ファイル本体（url_private_download）を bot token 付きで取得するため必要。
+  outgoingDomains: ["files.slack.com"],
   botScopes: [
     "chat:write",
     "chat:write.public",
     "datastore:read",
     "datastore:write",
+    // フォームに添付されたファイルを読み取るため必要。
+    "files:read",
   ],
 });
