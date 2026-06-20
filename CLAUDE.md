@@ -45,7 +45,10 @@ workflows/post_markdown.ts         # OpenForm → カスタム関数 の 2 ス�
 functions/post_markdown/
   definition.ts   # 関数の入出力定義
   mod.ts          # SlackFunction 本体 + 各ハンドラの登録（オーケストレーション）
-  blocks.ts       # Block Kit ペイロード組み立て（markdown / 投稿者 / 編集・削除ボタン）
+  blocks.ts       # メッセージ外枠（投稿者 context / 編集・削除ボタン / フォールバック）
+  content_blocks.ts # 本文を markdown / table ブロックに変換
+  markdown_table.ts # 本文を text/table セグメントに分割（GFM テーブル検出）
+  rich_text.ts    # インライン Markdown → rich_text（テーブルのセル装飾）
   file_source.ts  # 入力経路の XOR 解決 + 添付ファイルの DL/デコード + 長さガード
   interaction.ts  # block_actions payload から channel/ts を取り出す + 権限ガード
   edit_modal.ts   # 編集モーダルの組み立て・private_metadata 入出力・入力値取り出し
@@ -60,6 +63,11 @@ datastores/posted_messages.ts      # 監査ログ + 編集時の現在値ルッ�
 
 - 投稿は組み込み `SendMessage` ではなく**カスタム関数経由**。`markdown` ブロックを
   渡すため `client.chat.postMessage` を直接呼ぶ。
+- 本文中の GFM テーブルは `markdown` ブロックでは列を折り返せず横スクロールになる
+  ため、`markdown_table.ts` で検出して **`table` ブロック（全列 `is_wrapped`）**で
+  描画する。テキスト部分は従来どおり `markdown` ブロック。生の Markdown は保存・
+  編集の正のまま、描画時にパースする。セル内の装飾（太字・斜体・打消し・コード・
+  リンク）は `rich_text.ts` で `rich_text` セルに変換して反映する。
 - OpenForm を使うため Workflow には `interactivity` 入力が必須。OpenForm は最初の
   ステップに置く。
 - 編集ボタンに継続応答するため、関数は `completed: false` で開いたままにする。

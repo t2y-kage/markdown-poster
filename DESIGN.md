@@ -25,10 +25,22 @@ Block Kit の `markdown` ブロックは標準的な Markdown を渡すと Slack
 する。サポート記法に**テーブルが含まれており**、`| 見出し | ... | / | --- | ... |`
 形式がフォーマット済みテーブルとして描画される。
 
-→ フォームで受け取った Markdown 文字列を**パースせずそのまま** `markdown`
-ブロックの `text` に渡して `chat.postMessage` するだけでよい。最小コード・最小保守。
+→ 基本は、フォームで受け取った Markdown 文字列を**パースせずそのまま** `markdown`
+ブロックの `text` に渡して `chat.postMessage` するだけ。最小コード・最小保守。
 
-参照: https://docs.slack.dev/reference/block-kit/blocks/markdown-block
+ただし `markdown` ブロックは**テーブルの列幅・折り返しを制御できず**、長文セルが
+あると横に伸びて横スクロールになる。そこで本文中の GFM テーブルだけは検出して
+**`table` ブロック（列ごとに `is_wrapped` で折り返し）**で描画する（検出は
+`markdown_table.ts`、ブロック化は `content_blocks.ts`）。テーブル以外のテキストは
+引き続き `markdown` ブロック。生の
+Markdown は保存・編集の正のまま、描画時にパースする。セル内の Markdown 装飾
+（太字・斜体・打消し・コード・リンク）は `rich_text` セルに変換して反映する
+（`rich_text.ts`）。装飾の無いセルは `raw_text`。
+
+参照:
+
+- markdown ブロック: https://docs.slack.dev/reference/block-kit/blocks/markdown-block
+- table ブロック: https://docs.slack.dev/reference/block-kit/blocks/table-block
 
 ### 不採用にした代替案（必要時の拡張候補）
 
@@ -119,7 +131,9 @@ Link(Shortcut) Trigger
   （失敗してもログのみで投稿成否に影響させない）。
 - ヘルパは関心事ごとに分割: `file_source.ts`（入力経路の解決・DL・長さガード）、
   `interaction.ts`（payload 取り出し・権限ガード）、`edit_modal.ts`（編集モーダル）、
-  `blocks.ts`（ペイロード組み立て）、`client.ts`（SlackAPIClient の最小別名）。
+  `blocks.ts`（メッセージ外枠）／`content_blocks.ts`（本文→markdown/table ブロック）
+  ／`markdown_table.ts`・`rich_text.ts`（テーブル検出・セル装飾）、`client.ts`
+  （SlackAPIClient の最小別名）。
 - 通知用フォールバック `text` は**バイト長**で短く切り詰める（`buildFallbackText`）。
   本文を丸ごと積むと多バイト文字で `msg_too_long` を誘発するため。
 
@@ -157,6 +171,9 @@ Link(Shortcut) Trigger
   差は**テキストファイル添付**で埋める（添付経路は 12,000 文字まで、超過は拒否）。
 - **編集モーダルの上限**: `plain_text_input` の `max_length` は 3,000 が上限
   （超えると `views.open` が `invalid_arguments`）。3,000 字超の投稿は編集不可。
+- **table ブロックの上限**: 1 テーブルあたり全セル合計 10,000 文字、最大 100 行 ×
+  20 列。セル装飾はインライン記法（太字・斜体・打消し・コード・リンク）に対応。
+  三重 `***` などの特殊な入れ子は完全にはサポートしない。
 - **バイト長と `msg_too_long`**: 送信長制限はバイト長で判定される。多バイト文字
   （日本語など）は 1 文字 ≈ 3 バイトで、文字数の見た目より早く上限に当たる。通知用
   `text` フォールバックはバイト長で切り詰める。
@@ -191,7 +208,8 @@ Link(Shortcut) Trigger
 - **外部 Webhook トリガー版**: フォームを介さず JSON で Markdown を投入。TDnet 通知
   のような自動連携（人手 UX 不要なケース）に向く。なお直貼りの文字数制限は
   ファイル添付で回避済みのため、Webhook はあくまで自動連携用途として位置づける。
-- **table / data_table ブロック版**: 列揃え・リンク・ソート等が必要になった場合。
+- **data_table ブロック**: ソート/フィルタなどのインタラクティブなテーブルが必要に
+  なった場合に検討。
 - **GitHub Actions による CI/CD**: トークンを Secrets に登録し、push 契機で
   `slack deploy` を自動実行。認証情報をチャットに出さずに自動化できる。
 

@@ -14,7 +14,10 @@ workflows/post_markdown.ts                 # フォーム入力 → 投稿
 functions/post_markdown/
   definition.ts                            # 関数の入出力定義
   mod.ts                                   # SlackFunction + 各ハンドラ登録
-  blocks.ts                                # Block Kit ペイロード組み立て
+  blocks.ts                                # メッセージ外枠（投稿者/ボタン/フォールバック）
+  content_blocks.ts                        # 本文を markdown / table ブロックに変換
+  markdown_table.ts                        # 本文を text/table セグメントに分割
+  rich_text.ts                             # インライン Markdown → rich_text（セル装飾）
   file_source.ts                           # 直貼り/添付の解決・ファイル DL・長さガード
   interaction.ts                           # payload から channel/ts 取り出し・権限ガード
   edit_modal.ts                            # 編集モーダルの組み立て・入出力
@@ -85,6 +88,10 @@ slack trigger create --trigger-def triggers/post_markdown_trigger.ts
 | マグカップ | 雑貨 | 800 | 30 |
 | トートバッグ | 雑貨 | 1500 | 15 |
 ```
+
+テーブルは `table` ブロックで描画され、**列ごとに折り返される**ため、セル内の
+文字数が多くても横スクロールになりにくくなっています。セル内の Markdown 装飾
+（**太字**・_斜体_・~~打消し~~・`コード`・リンク）も反映されます。
 
 #### 長文（ファイル添付）について
 

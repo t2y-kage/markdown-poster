@@ -1,5 +1,7 @@
-// Block Kit ペイロード組み立てヘルパ。
-// markdown ブロック + 「編集」ボタンの actions ブロックを返す。
+// メッセージ外枠の組み立てヘルパ。
+// 投稿者 context + 本文ブロック（content_blocks.ts）+ 「編集」「削除」ボタンを返す。
+
+import { buildContentBlocks } from "./content_blocks.ts";
 
 export const EDIT_ACTION_ID = "edit_markdown";
 export const DELETE_ACTION_ID = "delete_markdown";
@@ -17,29 +19,24 @@ export const EDITABLE_MAX_LEN = 3000;
 
 export type Block = { type: string; [key: string]: unknown };
 
-export function buildMarkdownBlocks(
-  markdown: string,
+// 本文の前に置く投稿者表示。mrkdwn の <@U…> はメンションとして確実にレンダリング
+// される（markdown ブロックの挙動に依らない）。投稿者と異なるユーザが編集した場合
+// は編集者も併記する。投稿者が未指定なら表示しない（null）。
+function buildPosterContext(
   postedBy?: string,
   editedBy?: string,
-): Block[] {
-  const blocks: Block[] = [];
-  // 誰が投稿したか分かるよう、本文の前に投稿者を表示する。mrkdwn の <@U…> は
-  // メンションとして確実にレンダリングされる（markdown ブロックの挙動に依らない）。
-  // 投稿者と異なるユーザが編集した場合は編集者も併記する。
-  if (postedBy) {
-    let info = `投稿者: <@${postedBy}>`;
-    if (editedBy && editedBy !== postedBy) {
-      info += `\n編集者: <@${editedBy}>`;
-    }
-    blocks.push({
-      type: "context",
-      elements: [{ type: "mrkdwn", text: info }],
-    });
-  }
-  blocks.push({ type: "markdown", text: markdown });
-  // 3,000 字を超える本文は編集モーダルで扱えないため、編集ボタンを出さない。
+): Block | null {
+  if (!postedBy) return null;
+  let info = `投稿者: <@${postedBy}>`;
+  if (editedBy && editedBy !== postedBy) info += `\n編集者: <@${editedBy}>`;
+  return { type: "context", elements: [{ type: "mrkdwn", text: info }] };
+}
+
+// 「編集」「削除」ボタンの actions ブロック。3,000 字超の本文は編集モーダルで扱え
+// ないため、editable=false のときは編集ボタンを出さない。
+function buildActionsBlock(editable: boolean): Block {
   const elements: Block[] = [];
-  if (markdown.length <= EDITABLE_MAX_LEN) {
+  if (editable) {
     elements.push({
       type: "button",
       action_id: EDIT_ACTION_ID,
@@ -63,8 +60,20 @@ export function buildMarkdownBlocks(
       style: "danger",
     },
   });
-  blocks.push({ type: "actions", block_id: EDIT_BLOCK_ID, elements });
-  return blocks;
+  return { type: "actions", block_id: EDIT_BLOCK_ID, elements };
+}
+
+export function buildMarkdownBlocks(
+  markdown: string,
+  postedBy?: string,
+  editedBy?: string,
+): Block[] {
+  const poster = buildPosterContext(postedBy, editedBy);
+  return [
+    ...(poster ? [poster] : []),
+    ...buildContentBlocks(markdown),
+    buildActionsBlock(markdown.length <= EDITABLE_MAX_LEN),
+  ];
 }
 
 export function buildFallbackText(markdown: string): string {

@@ -30,14 +30,23 @@ Deno.test("buildFallbackText: multibyte text is capped by bytes, not chars", () 
   assert(out.length < 1000);
 });
 
-Deno.test("buildMarkdownBlocks: emits a markdown block followed by an edit actions block", () => {
-  const blocks = buildMarkdownBlocks("| a |\n| --- |\n| 1 |");
+Deno.test("buildMarkdownBlocks: emits a markdown block followed by edit/delete actions", () => {
+  const blocks = buildMarkdownBlocks("ふつうの本文");
   assertEquals(blocks[0].type, "markdown");
-  assertEquals(blocks[0].text, "| a |\n| --- |\n| 1 |");
+  assertEquals(blocks[0].text, "ふつうの本文");
   assertEquals(blocks[1].type, "actions");
   const elements = blocks[1].elements as Array<{ action_id: string }>;
   assertEquals(elements[0].action_id, EDIT_ACTION_ID);
   assertEquals(elements[1].action_id, DELETE_ACTION_ID);
+});
+
+Deno.test("buildMarkdownBlocks: places content between poster and actions", () => {
+  const blocks = buildMarkdownBlocks(
+    "| a | b |\n| --- | --- |\n| 1 | 2 |",
+    "U123",
+  );
+  // [投稿者 context, table, actions] の順で組み立てられる。
+  assertEquals(blocks.map((b) => b.type), ["context", "table", "actions"]);
 });
 
 Deno.test("buildMarkdownBlocks: hides the edit button when over the editable cap", () => {
