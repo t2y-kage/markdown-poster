@@ -3,10 +3,7 @@
 // 分岐は「Markdown 文字列を得る」この冒頭だけに閉じ込める。ここから先
 // （ブロック組み立て・投稿・編集・Datastore 保存）は経路に依らず共通。
 
-// deno_slack_api の SlackAPIClient を厳密に取り回す必要は無いため、
-// 必要メソッドだけを持つ最小構造で受け取る（audit_log.ts と同方針）。
-// deno-lint-ignore no-explicit-any
-type Client = any;
+import type { Client } from "./client.ts";
 
 // markdown ブロックの 1 メッセージ上限。ファイル経路はこれに当たり得るため
 // 関数内でガードする（超過は拒否）。直貼り経路は OpenForm 側の maxLength で

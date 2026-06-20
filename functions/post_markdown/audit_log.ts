@@ -4,11 +4,7 @@
 // いずれも失敗を握り潰してログのみ残す（呼び出し側には throw しない）。
 
 import { PostedMessagesDatastore } from "../../datastores/posted_messages.ts";
-
-// deno_slack_api の SlackAPIClient 型を厳密に取り回す必要は無いため、
-// 必要メソッドだけを持つ最小構造で受け取る。
-// deno-lint-ignore no-explicit-any
-type Client = any;
+import type { Client } from "./client.ts";
 
 export type MessageRecord = {
   channel: string;

@@ -13,10 +13,14 @@ import {
   enforceLengthLimit,
   resolveSource,
 } from "./file_source.ts";
-
-const EDIT_MODAL_CALLBACK_ID = "edit_markdown_modal";
-const MARKDOWN_INPUT_BLOCK_ID = "markdown_input_block";
-const MARKDOWN_INPUT_ACTION_ID = "markdown_input";
+import { resolveOwnedTarget, resolveTarget } from "./interaction.ts";
+import {
+  buildEditModalView,
+  EDIT_MODAL_CALLBACK_ID,
+  inputErrorResponse,
+  parseEditMeta,
+  readMarkdownInput,
+} from "./edit_modal.ts";
 
 // --- 投稿先決定 ---
 
@@ -40,86 +44,6 @@ function resolvePostTarget(
   return { channel: parsed.channel, thread_ts: parsed.thread_ts };
 }
 
-// --- インタラクション payload 取り出し ---
-
-// block_actions payload は deno-slack-sdk の body 型に一部フィールドが現れないので、
-// ここで構造アサーションを集約する。
-type ActionBodyShape = {
-  channel?: { id?: string };
-  container?: { channel_id?: string; message_ts?: string };
-  message?: { ts?: string };
-};
-
-function pickChannelFromBody(body: unknown, fallback: string): string {
-  const b = body as ActionBodyShape;
-  return b.channel?.id ?? b.container?.channel_id ?? fallback;
-}
-
-function pickMessageTsFromBody(body: unknown): string | undefined {
-  const b = body as ActionBodyShape;
-  return b.container?.message_ts ?? b.message?.ts;
-}
-
-// 操作対象メッセージの channel/ts を payload から取り出す。thread_url 経由で
-// 別チャンネルに投稿された可能性があるため、inputs ではなく payload を優先する。
-function resolveTarget(
-  body: unknown,
-  inputs: { channel: string },
-): { channel: string; ts: string } | null {
-  const channel = pickChannelFromBody(body, inputs.channel);
-  const ts = pickMessageTsFromBody(body);
-  if (!ts) return null;
-  return { channel, ts };
-}
-
-// 削除は破壊的なため「最初に投稿したユーザだけ」に許可する。権限を満たさなければ
-// ephemeral で通知し null を返す（編集は誰でも可なのでこのガードを通さない）。
-async function resolveOwnedTarget(
-  // deno-lint-ignore no-explicit-any
-  body: any,
-  inputs: { channel: string; submitted_by: string },
-  // deno-lint-ignore no-explicit-any
-  client: any,
-): Promise<{ channel: string; ts: string } | null> {
-  const target = resolveTarget(body, inputs);
-  if (!target) return null;
-
-  if (body.user.id !== inputs.submitted_by) {
-    await client.chat.postEphemeral({
-      channel: target.channel,
-      user: body.user.id,
-      text: "このメッセージを削除できるのは、最初に投稿したユーザだけです。",
-    });
-    return null;
-  }
-  return target;
-}
-
-// --- 編集モーダル ---
-
-// posted_by は最初に投稿したユーザ。編集時も投稿者表示を保つため引き回す。
-type EditMeta = { channel: string; ts: string; posted_by: string };
-
-function parseEditMeta(raw: string | undefined): EditMeta | null {
-  try {
-    const meta = JSON.parse(raw ?? "{}") as Partial<EditMeta>;
-    if (
-      typeof meta.channel === "string" && typeof meta.ts === "string" &&
-      typeof meta.posted_by === "string"
-    ) {
-      return { channel: meta.channel, ts: meta.ts, posted_by: meta.posted_by };
-    }
-  } catch { /* fall through */ }
-  return null;
-}
-
-function inputErrorResponse(message: string) {
-  return {
-    response_action: "errors" as const,
-    errors: { [MARKDOWN_INPUT_BLOCK_ID]: message },
-  };
-}
-
 // Slack の送信長エラーは生のコードだと分かりにくいので、原因と対処を案内する。
 // 多バイト文字はバイト長が膨らみ、文字数の見た目より早く上限に当たる。
 function describePostError(error: string | undefined): string {
@@ -127,32 +51,6 @@ function describePostError(error: string | undefined): string {
     return "内容が Slack のメッセージ上限を超えました（日本語など多バイト文字は見た目の文字数より大きくなります）。文字数を減らすか、不要な行を削ってください。";
   }
   return `投稿に失敗しました: ${error ?? "unknown error"}`;
-}
-
-function buildEditModalView(meta: EditMeta, initialValue: string) {
-  return {
-    type: "modal",
-    callback_id: EDIT_MODAL_CALLBACK_ID,
-    private_metadata: JSON.stringify(meta),
-    title: { type: "plain_text", text: "Markdown を編集" },
-    submit: { type: "plain_text", text: "更新" },
-    close: { type: "plain_text", text: "キャンセル" },
-    blocks: [
-      {
-        type: "input",
-        block_id: MARKDOWN_INPUT_BLOCK_ID,
-        label: { type: "plain_text", text: "Markdown" },
-        element: {
-          type: "plain_text_input",
-          action_id: MARKDOWN_INPUT_ACTION_ID,
-          multiline: true,
-          initial_value: initialValue,
-          // plain_text_input の max_length は 3,000 が上限（Slack の制約）。
-          max_length: EDITABLE_MAX_LEN,
-        },
-      },
-    ],
-  };
 }
 
 // --- SlackFunction 定義 ---
@@ -254,8 +152,7 @@ export default SlackFunction(
         return inputErrorResponse("メタデータの解析に失敗しました。");
       }
 
-      const newMarkdown = view.state.values
-        ?.[MARKDOWN_INPUT_BLOCK_ID]?.[MARKDOWN_INPUT_ACTION_ID]?.value ?? "";
+      const newMarkdown = readMarkdownInput(view);
       if (newMarkdown.trim() === "") {
         return inputErrorResponse("Markdown を入力してください。");
       }
