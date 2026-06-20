@@ -141,36 +141,9 @@ Link(Shortcut) Trigger
 
 ## 5. プロジェクト構成
 
-```
-markdown-poster/
-├── manifest.ts
-├── workflows/
-│   └── post_markdown.ts
-├── functions/
-│   └── post_markdown/
-│       ├── definition.ts
-│       ├── mod.ts             # SlackFunction + ハンドラ登録
-│       ├── blocks.ts          # Block Kit 組み立て
-│       ├── file_source.ts     # 入力経路の解決・ファイル DL・長さガード
-│       ├── interaction.ts     # payload 取り出し・権限ガード
-│       ├── edit_modal.ts      # 編集モーダル
-│       ├── thread_url.ts      # メッセージ URL のパース
-│       ├── audit_log.ts       # Datastore 入出力
-│       ├── client.ts          # SlackAPIClient の最小別名
-│       └── *_test.ts          # 純粋関数のユニットテスト
-├── triggers/
-│   └── post_markdown_trigger.ts
-├── datastores/
-│   └── posted_messages.ts        # 任意
-├── assets/
-│   └── icon.png                  # 要追加
-├── deno.jsonc                    # 要追加（CLI スキャフォールド）
-├── import_map.json               # 要追加
-├── slack.json                    # 要追加
-├── .gitignore                    # 既存（要補完）
-├── LICENSE                       # 既存（MIT）
-└── README.md
-```
+ファイル一覧と各ファイルの役割は README の「構成」を参照。各コンポーネントの
+詳細仕様は本書「4. コンポーネント仕様」を参照。`deno.jsonc` / `import_map.json` /
+`slack.json` は Slack CLI のスキャフォールドが生成する設定ファイル。
 
 ---
 
@@ -188,6 +161,9 @@ markdown-poster/
   （日本語など）は 1 文字 ≈ 3 バイトで、文字数の見た目より早く上限に当たる。通知用
   `text` フォールバックはバイト長で切り詰める。
 - **タイムアウト**: デプロイ済みファンクションは 60 秒、View インタラクションは 10 秒。
+- **関数の継続実行**: 編集・削除ボタンに応答し続けるため `post_markdown` は
+  `completed: false` で開いたままにする（ハンドラ単位の 60 秒制約のため通常運用上は
+  問題ない）。
 - **レンダリング確認**: `markdown` ブロックのテーブル描画は対象クライアント／
   ワークスペースで実機確認する。
 - **実行環境**: `slack run` / `slack deploy` はローカルの Slack CLI から行う。
@@ -196,7 +172,7 @@ markdown-poster/
 
 ## 7. 実装タスク（Claude Code 用チェックリスト）
 
-- [ ] 既存リポジトリに上記ディレクトリ構成でソースを配置
+- [ ] 既存リポジトリに README の「構成」のディレクトリ構成でソースを配置
 - [ ] `slack create` 相当のスキャフォールド（`deno.jsonc` / `import_map.json` /
       `slack.json`）を整備、または既存 CLI 版からコピー
 - [ ] `.gitignore` を Deno / Slack CLI 向けに補完（`.slack/`, `*.env`, ローカル
@@ -210,36 +186,7 @@ markdown-poster/
 
 ---
 
-## 8. セットアップ／実行コマンド
-
-```bash
-# Slack CLI 未導入の場合
-curl -fsSL https://downloads.slack-edge.com/slack-cli/install.sh | bash
-slack login
-
-# ローカル開発
-slack run
-slack trigger create --trigger-def triggers/post_markdown_trigger.ts
-
-# 本番
-slack deploy
-slack trigger create --trigger-def triggers/post_markdown_trigger.ts
-```
-
----
-
-## 9. 入力例
-
-```
-| 銘柄コード | 会社名 | 開示種別 |
-| --- | --- | --- |
-| 7203 | トヨタ自動車 | 決算短信 |
-| 6758 | ソニーグループ | 自己株式取得 |
-```
-
----
-
-## 10. 将来拡張
+## 8. 将来拡張
 
 - **外部 Webhook トリガー版**: フォームを介さず JSON で Markdown を投入。TDnet 通知
   のような自動連携（人手 UX 不要なケース）に向く。なお直貼りの文字数制限は
