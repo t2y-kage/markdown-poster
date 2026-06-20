@@ -9,6 +9,12 @@ import {
   resolveSource,
 } from "./file_source.ts";
 
+// Slack の plain_text_input は max_length を 3,000 までしか許可しない
+// （超えると views.open が invalid_arguments で失敗する）。このため編集モーダルで
+// 扱える本文は 3,000 字までで、ファイル由来の長文（最大 12,000 字）はモーダルでは
+// 編集できない。
+const EDIT_MODAL_MAX_LEN = 3000;
+
 const EDIT_MODAL_CALLBACK_ID = "edit_markdown_modal";
 const MARKDOWN_INPUT_BLOCK_ID = "markdown_input_block";
 const MARKDOWN_INPUT_ACTION_ID = "markdown_input";
@@ -94,9 +100,8 @@ function buildEditModalView(meta: EditMeta, initialValue: string) {
           action_id: MARKDOWN_INPUT_ACTION_ID,
           multiline: true,
           initial_value: initialValue,
-          // markdown ブロックの上限に合わせる。ファイル経由の長文（〜12,000字）も
-          // 編集できるようにするため、直貼りフォームの 3,000 字ではなくこちらに揃える。
-          max_length: 12000,
+          // plain_text_input の max_length は 3,000 が上限（Slack の制約）。
+          max_length: EDIT_MODAL_MAX_LEN,
         },
       },
     ],
@@ -173,6 +178,18 @@ export default SlackFunction(
       }
 
       const currentMarkdown = await fetchLatestMarkdown(client, ts);
+
+      // 編集モーダルの入力欄は 3,000 字までしか保持できない。これを超える本文
+      // （ファイル由来の長文）はモーダルでは編集できないため、案内して中断する。
+      if (currentMarkdown.length > EDIT_MODAL_MAX_LEN) {
+        await client.chat.postEphemeral({
+          channel,
+          user: body.user.id,
+          text:
+            `この投稿は ${currentMarkdown.length} 字あり、編集モーダルの上限（${EDIT_MODAL_MAX_LEN} 字）を超えるため、その場では編集できません。修正版を Markdown ファイルとして貼り直してください。`,
+        });
+        return;
+      }
 
       const view = await client.views.open({
         // Run on Slack では trigger_id ではなく interactivity_pointer を渡す
