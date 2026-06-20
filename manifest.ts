@@ -1,15 +1,15 @@
 import { Manifest } from "deno-slack-sdk/mod.ts";
-import { PostMarkdownTableWorkflow } from "./workflows/post_markdown_table.ts";
-import { PostMarkdownTableDefinition } from "./functions/post_markdown_table/definition.ts";
-import { PostedTablesDatastore } from "./datastores/posted_tables.ts";
+import { PostMarkdownWorkflow } from "./workflows/post_markdown.ts";
+import { PostMarkdownDefinition } from "./functions/post_markdown/definition.ts";
+import { PostedMessagesDatastore } from "./datastores/posted_messages.ts";
 
 export default Manifest({
-  name: "markdown-table-poster",
-  description: "Post Markdown tables to Slack as rich tables.",
+  name: "markdown-poster",
+  description: "Post Markdown to Slack as rich messages.",
   icon: "assets/icon.png",
-  workflows: [PostMarkdownTableWorkflow],
-  functions: [PostMarkdownTableDefinition],
-  datastores: [PostedTablesDatastore],
+  workflows: [PostMarkdownWorkflow],
+  functions: [PostMarkdownDefinition],
+  datastores: [PostedMessagesDatastore],
   outgoingDomains: [],
   botScopes: [
     "chat:write",

@@ -1,7 +1,7 @@
 import { DefineDatastore, Schema } from "deno-slack-sdk/mod.ts";
 
-export const PostedTablesDatastore = DefineDatastore({
-  name: "posted_tables",
+export const PostedMessagesDatastore = DefineDatastore({
+  name: "posted_messages",
   primary_key: "id",
   attributes: {
     id: { type: Schema.types.string },

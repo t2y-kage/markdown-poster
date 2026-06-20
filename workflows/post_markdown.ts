@@ -1,11 +1,10 @@
 import { DefineWorkflow, Schema } from "deno-slack-sdk/mod.ts";
-import { PostMarkdownTableDefinition } from "../functions/post_markdown_table/definition.ts";
+import { PostMarkdownDefinition } from "../functions/post_markdown/definition.ts";
 
-export const PostMarkdownTableWorkflow = DefineWorkflow({
-  callback_id: "post_markdown_table_workflow",
-  title: "Post markdown table",
-  description:
-    "Open a form to collect a Markdown table and post it as a rich table.",
+export const PostMarkdownWorkflow = DefineWorkflow({
+  callback_id: "post_markdown_workflow",
+  title: "Post markdown",
+  description: "Open a form to collect Markdown and post it as a rich message.",
   input_parameters: {
     properties: {
       interactivity: { type: Schema.slack.types.interactivity },
@@ -15,13 +14,13 @@ export const PostMarkdownTableWorkflow = DefineWorkflow({
   },
 });
 
-const formStep = PostMarkdownTableWorkflow.addStep(
+const formStep = PostMarkdownWorkflow.addStep(
   Schema.slack.functions.OpenForm,
   {
-    title: "Post markdown table",
+    title: "Post markdown",
     submit_label: "Post",
-    description: "Paste a Markdown table to post it as a rich table.",
-    interactivity: PostMarkdownTableWorkflow.inputs.interactivity,
+    description: "Paste Markdown to post it as a rich message.",
+    interactivity: PostMarkdownWorkflow.inputs.interactivity,
     fields: {
       required: ["channel", "markdown"],
       elements: [
@@ -29,7 +28,7 @@ const formStep = PostMarkdownTableWorkflow.addStep(
           name: "channel",
           title: "Channel",
           type: Schema.slack.types.channel_id,
-          default: PostMarkdownTableWorkflow.inputs.channel,
+          default: PostMarkdownWorkflow.inputs.channel,
         },
         {
           name: "thread_url",
@@ -49,9 +48,9 @@ const formStep = PostMarkdownTableWorkflow.addStep(
   },
 );
 
-PostMarkdownTableWorkflow.addStep(PostMarkdownTableDefinition, {
+PostMarkdownWorkflow.addStep(PostMarkdownDefinition, {
   channel: formStep.outputs.fields.channel,
   markdown: formStep.outputs.fields.markdown,
   thread_url: formStep.outputs.fields.thread_url,
-  submitted_by: PostMarkdownTableWorkflow.inputs.interactivity.interactor.id,
+  submitted_by: PostMarkdownWorkflow.inputs.interactivity.interactor.id,
 });

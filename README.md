@@ -1,7 +1,8 @@
-# markdown-table-poster
+# markdown-poster
 
-Slack-hosted (Run on Slack / Deno Slack SDK) app that posts a pasted Markdown
-table to a Slack channel as a rich table, using Block Kit's `markdown` block.
+Slack-hosted (Run on Slack / Deno Slack SDK) app that posts pasted Markdown
+to a Slack channel as a rich message, using Block Kit's `markdown` block.
+Markdown のテーブル記法もそのままレンダリングされます。
 
 詳細な設計は [DESIGN.md](./DESIGN.md) を参照してください。
 
@@ -9,16 +10,16 @@ table to a Slack channel as a rich table, using Block Kit's `markdown` block.
 
 ```
 manifest.ts                                # App マニフェスト
-workflows/post_markdown_table.ts           # フォーム入力 → 投稿
-functions/post_markdown_table/
+workflows/post_markdown.ts                 # フォーム入力 → 投稿
+functions/post_markdown/
   definition.ts                            # 関数の入出力定義
   mod.ts                                   # SlackFunction + 編集ハンドラ登録
   blocks.ts                                # Block Kit ペイロード組み立て
   thread_url.ts                            # Slack メッセージ URL のパース
   audit_log.ts                             # Datastore 書き込み・読み出し
   thread_url_test.ts                       # parseThreadUrl のユニットテスト
-triggers/post_markdown_table_trigger.ts    # Link (Shortcut) トリガー
-datastores/posted_tables.ts                # 監査ログ + 編集時の現在値ルックアップ
+triggers/post_markdown_trigger.ts          # Link (Shortcut) トリガー
+datastores/posted_messages.ts              # 監査ログ + 編集時の現在値ルックアップ
 deno.jsonc / import_map.json / .slack/hooks.json
 ```
 
@@ -42,7 +43,7 @@ curl -fsSL https://deno.land/install.sh | sh
 
 ```bash
 slack run
-slack trigger create --trigger-def triggers/post_markdown_table_trigger.ts
+slack trigger create --trigger-def triggers/post_markdown_trigger.ts
 ```
 
 表示された Shortcut URL
@@ -52,7 +53,7 @@ slack trigger create --trigger-def triggers/post_markdown_table_trigger.ts
 
 ```bash
 slack deploy
-slack trigger create --trigger-def triggers/post_markdown_table_trigger.ts
+slack trigger create --trigger-def triggers/post_markdown_trigger.ts
 ```
 
 ## 使い方
@@ -61,10 +62,10 @@ slack trigger create --trigger-def triggers/post_markdown_table_trigger.ts
 
 1. Shortcut URL（または「ワークフロー」メニュー）からワークフローを起動
 2. 投稿先チャンネル、（任意で）スレッド対象メッセージの URL、Markdown
-   テーブルを入力して「Post」
-3. レンダリングされたテーブルが投稿される（末尾に「編集」ボタン付き）
+   を入力して「Post」
+3. レンダリングされた Markdown が投稿される（末尾に「編集」ボタン付き）
 
-入力例:
+入力例（テーブル記法もそのまま描画されます）:
 
 ```
 | 銘柄コード | 会社名 | 開示種別 |
@@ -88,7 +89,7 @@ slack trigger create --trigger-def triggers/post_markdown_table_trigger.ts
 
 ### 編集
 
-投稿された rich テーブルには「編集」ボタンが付きます。押すと現在の Markdown
+投稿された rich メッセージには「編集」ボタンが付きます。押すと現在の Markdown
 が入った モーダルが開き、編集して「更新」すると `chat.update`
 でその場で差し替わります。
 **編集権限は最初に投稿したユーザのみ**で、それ以外がボタンを押すと ephemeral
@@ -105,7 +106,7 @@ deno lint         # 静的解析
 deno test --allow-read --allow-net   # ユニットテスト
 ```
 
-`functions/post_markdown_table/thread_url_test.ts` で `parseThreadUrl`
+`functions/post_markdown/thread_url_test.ts` で `parseThreadUrl`
 のユニットテストを定義しています。新しい純粋関数を追加するときは隣に `*_test.ts`
 を置く形を踏襲してください。
 
@@ -114,9 +115,9 @@ deno test --allow-read --allow-net   # ユニットテスト
 - `markdown` ブロックの型が `deno-slack-sdk` に未追随のため、`blocks`
   をキャストしています。
 - OpenForm の文字列フィールドはおおむね 3,000
-  文字が上限です。これより大きなテーブルを 扱う場合は将来的に Webhook
+  文字が上限です。これより大きな Markdown を 扱う場合は将来的に Webhook
   トリガー版の追加を検討してください。
-- 編集ボタンに継続応答するため、`post_markdown_table` 関数は `completed: false`
+- 編集ボタンに継続応答するため、`post_markdown` 関数は `completed: false`
   で 開いたままになります。Slack-hosted の関数は実行ごとに 60
   秒の制約がありますが、 ハンドラ単位の制限のため通常運用上は問題ありません。
 - アプリアイコンは `manifest.ts` の `icon`（必須）で `assets/icon.png` を参照します。
@@ -127,8 +128,8 @@ deno test --allow-read --allow-net   # ユニットテスト
 
 Datastore は「監査ログ」と「編集時の現在 Markdown
 ルックアップ」の両方を兼ねています。 完全に外す場合は
-`datastores/posted_tables.ts` と `manifest.ts` の `datastores` / `datastore:*`
-スコープを削除し、`functions/post_markdown_table/mod.ts` の
+`datastores/posted_messages.ts` と `manifest.ts` の `datastores` / `datastore:*`
+スコープを削除し、`functions/post_markdown/mod.ts` の
 `client.apps.datastore.*`
 呼び出しと、編集時の現在値ルックアップを削除してください。
 削除すると編集モーダルが空で開くようになります。

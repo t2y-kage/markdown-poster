@@ -1,16 +1,16 @@
-// posted_tables Datastore の書き込み / 読み出しヘルパ。
+// posted_messages Datastore の書き込み / 読み出しヘルパ。
 //
 // 投稿成否を Datastore の成否に巻き込まないため、書き込み・読み出しは
 // いずれも失敗を握り潰してログのみ残す（呼び出し側には throw しない）。
 
-import { PostedTablesDatastore } from "../../datastores/posted_tables.ts";
+import { PostedMessagesDatastore } from "../../datastores/posted_messages.ts";
 
 // deno_slack_api の SlackAPIClient 型を厳密に取り回す必要は無いため、
 // 必要メソッドだけを持つ最小構造で受け取る。
 // deno-lint-ignore no-explicit-any
 type Client = any;
 
-export type TableRecord = {
+export type MessageRecord = {
   channel: string;
   markdown: string;
   submitted_by: string;
@@ -21,11 +21,11 @@ export type TableRecord = {
 // 並べた先頭が「現在の状態」を表す。
 export async function recordPost(
   client: Client,
-  rec: TableRecord,
+  rec: MessageRecord,
 ): Promise<void> {
   try {
     await client.apps.datastore.put({
-      datastore: PostedTablesDatastore.name,
+      datastore: PostedMessagesDatastore.name,
       item: {
         id: crypto.randomUUID(),
         channel: rec.channel,
@@ -47,7 +47,7 @@ export async function fetchLatestMarkdown(
 ): Promise<string> {
   try {
     const res = await client.apps.datastore.query({
-      datastore: PostedTablesDatastore.name,
+      datastore: PostedMessagesDatastore.name,
       expression: "#posted_ts = :ts",
       expression_attributes: { "#posted_ts": "posted_ts" },
       expression_values: { ":ts": ts },
