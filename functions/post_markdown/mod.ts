@@ -89,6 +89,8 @@ function buildEditModalView(meta: EditMeta, initialValue: string) {
           action_id: MARKDOWN_INPUT_ACTION_ID,
           multiline: true,
           initial_value: initialValue,
+          // 投稿フォームと同じ上限。超過時はモーダル送信がブロックされる。
+          max_length: 3000,
         },
       },
     ],
