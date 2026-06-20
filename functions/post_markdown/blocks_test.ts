@@ -40,42 +40,13 @@ Deno.test("buildMarkdownBlocks: emits a markdown block followed by edit/delete a
   assertEquals(elements[1].action_id, DELETE_ACTION_ID);
 });
 
-Deno.test("buildMarkdownBlocks: renders a GFM table as a wrapped table block", () => {
-  const blocks = buildMarkdownBlocks("| a | b |\n| --- | --- |\n| 1 | 2 |");
-  assertEquals(blocks[0].type, "table");
-  const settings = blocks[0].column_settings as Array<{ is_wrapped: boolean }>;
-  // 全列が折り返し（横スクロール回避）。
-  assertEquals(settings, [{ is_wrapped: true }, { is_wrapped: true }]);
-  const rows = blocks[0].rows as Array<Array<{ type: string; text: string }>>;
-  assertEquals(rows[0], [
-    { type: "raw_text", text: "a" },
-    { type: "raw_text", text: "b" },
-  ]);
-  assertEquals(rows[1], [
-    { type: "raw_text", text: "1" },
-    { type: "raw_text", text: "2" },
-  ]);
-  // テーブルの後ろに actions ブロックが続く。
-  assertEquals(blocks[1].type, "actions");
-});
-
-Deno.test("buildMarkdownBlocks: table cells render markdown as rich_text", () => {
+Deno.test("buildMarkdownBlocks: places content between poster and actions", () => {
   const blocks = buildMarkdownBlocks(
-    "| 名前 | メモ |\n| --- | --- |\n| A | **重要** |",
+    "| a | b |\n| --- | --- |\n| 1 | 2 |",
+    "U123",
   );
-  const rows = blocks[0].rows as Array<Array<Record<string, unknown>>>;
-  // 装飾なしセルは raw_text のまま。
-  assertEquals(rows[1][0], { type: "raw_text", text: "A" });
-  // 装飾ありセルは rich_text。
-  assertEquals(rows[1][1], {
-    type: "rich_text",
-    elements: [
-      {
-        type: "rich_text_section",
-        elements: [{ type: "text", text: "重要", style: { bold: true } }],
-      },
-    ],
-  });
+  // [投稿者 context, table, actions] の順で組み立てられる。
+  assertEquals(blocks.map((b) => b.type), ["context", "table", "actions"]);
 });
 
 Deno.test("buildMarkdownBlocks: hides the edit button when over the editable cap", () => {

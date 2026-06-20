@@ -1,8 +1,7 @@
-// Block Kit ペイロード組み立てヘルパ。
-// 本文（markdown / table ブロック）+ 投稿者 + 「編集」「削除」ボタンを返す。
+// メッセージ外枠の組み立てヘルパ。
+// 投稿者 context + 本文ブロック（content_blocks.ts）+ 「編集」「削除」ボタンを返す。
 
-import { splitIntoSegments } from "./markdown_table.ts";
-import { parseInlineRichText } from "./rich_text.ts";
+import { buildContentBlocks } from "./content_blocks.ts";
 
 export const EDIT_ACTION_ID = "edit_markdown";
 export const DELETE_ACTION_ID = "delete_markdown";
@@ -20,69 +19,24 @@ export const EDITABLE_MAX_LEN = 3000;
 
 export type Block = { type: string; [key: string]: unknown };
 
-// セルをテーブルセルに変換する。装飾の無いセルは raw_text、Markdown 装飾を含む
-// セルは rich_text にする（太字・斜体・打消し・コード・リンクを反映）。
-function buildCell(text: string): Block {
-  const els = parseInlineRichText(text);
-  // 装飾なし（単一のプレーンテキスト）は素朴な raw_text にする。
-  if (els.length === 0) return { type: "raw_text", text: "" };
-  if (els.length === 1 && els[0].type === "text" && !els[0].style) {
-    return { type: "raw_text", text: els[0].text };
-  }
-  return {
-    type: "rich_text",
-    elements: [{ type: "rich_text_section", elements: els }],
-  };
-}
-
-// GFM テーブルを table ブロックにする。全列を折り返し（is_wrapped）にして、
-// 長文セルがあっても横スクロールせず適度に改行されるようにする。
-function buildTableBlock(rows: string[][]): Block {
-  const colCount = Math.max(...rows.map((row) => row.length));
-  return {
-    type: "table",
-    column_settings: Array.from({ length: colCount }, () => ({
-      is_wrapped: true,
-    })),
-    rows: rows.map((row) =>
-      Array.from({ length: colCount }, (_, i) => buildCell(row[i] ?? ""))
-    ),
-  };
-}
-
-// 本文を markdown ブロック（テキスト）と table ブロック（GFM テーブル）に分けて
-// 組み立てる。テーブルが無ければ従来どおり単一の markdown ブロックになる。
-function buildContentBlocks(markdown: string): Block[] {
-  return splitIntoSegments(markdown).map((seg) =>
-    seg.kind === "table"
-      ? buildTableBlock(seg.rows)
-      : { type: "markdown", text: seg.text }
-  );
-}
-
-export function buildMarkdownBlocks(
-  markdown: string,
+// 本文の前に置く投稿者表示。mrkdwn の <@U…> はメンションとして確実にレンダリング
+// される（markdown ブロックの挙動に依らない）。投稿者と異なるユーザが編集した場合
+// は編集者も併記する。投稿者が未指定なら表示しない（null）。
+function buildPosterContext(
   postedBy?: string,
   editedBy?: string,
-): Block[] {
-  const blocks: Block[] = [];
-  // 誰が投稿したか分かるよう、本文の前に投稿者を表示する。mrkdwn の <@U…> は
-  // メンションとして確実にレンダリングされる（markdown ブロックの挙動に依らない）。
-  // 投稿者と異なるユーザが編集した場合は編集者も併記する。
-  if (postedBy) {
-    let info = `投稿者: <@${postedBy}>`;
-    if (editedBy && editedBy !== postedBy) {
-      info += `\n編集者: <@${editedBy}>`;
-    }
-    blocks.push({
-      type: "context",
-      elements: [{ type: "mrkdwn", text: info }],
-    });
-  }
-  blocks.push(...buildContentBlocks(markdown));
-  // 3,000 字を超える本文は編集モーダルで扱えないため、編集ボタンを出さない。
+): Block | null {
+  if (!postedBy) return null;
+  let info = `投稿者: <@${postedBy}>`;
+  if (editedBy && editedBy !== postedBy) info += `\n編集者: <@${editedBy}>`;
+  return { type: "context", elements: [{ type: "mrkdwn", text: info }] };
+}
+
+// 「編集」「削除」ボタンの actions ブロック。3,000 字超の本文は編集モーダルで扱え
+// ないため、editable=false のときは編集ボタンを出さない。
+function buildActionsBlock(editable: boolean): Block {
   const elements: Block[] = [];
-  if (markdown.length <= EDITABLE_MAX_LEN) {
+  if (editable) {
     elements.push({
       type: "button",
       action_id: EDIT_ACTION_ID,
@@ -106,8 +60,20 @@ export function buildMarkdownBlocks(
       style: "danger",
     },
   });
-  blocks.push({ type: "actions", block_id: EDIT_BLOCK_ID, elements });
-  return blocks;
+  return { type: "actions", block_id: EDIT_BLOCK_ID, elements };
+}
+
+export function buildMarkdownBlocks(
+  markdown: string,
+  postedBy?: string,
+  editedBy?: string,
+): Block[] {
+  const poster = buildPosterContext(postedBy, editedBy);
+  return [
+    ...(poster ? [poster] : []),
+    ...buildContentBlocks(markdown),
+    buildActionsBlock(markdown.length <= EDITABLE_MAX_LEN),
+  ];
 }
 
 export function buildFallbackText(markdown: string): string {

@@ -45,7 +45,8 @@ workflows/post_markdown.ts         # OpenForm → カスタム関数 の 2 ス�
 functions/post_markdown/
   definition.ts   # 関数の入出力定義
   mod.ts          # SlackFunction 本体 + 各ハンドラの登録（オーケストレーション）
-  blocks.ts       # Block Kit ペイロード組み立て（markdown / table / 投稿者 / ボタン）
+  blocks.ts       # メッセージ外枠（投稿者 context / 編集・削除ボタン / フォールバック）
+  content_blocks.ts # 本文を markdown / table ブロックに変換
   markdown_table.ts # 本文を text/table セグメントに分割（GFM テーブル検出）
   rich_text.ts    # インライン Markdown → rich_text（テーブルのセル装飾）
   file_source.ts  # 入力経路の XOR 解決 + 添付ファイルの DL/デコード + 長さガード

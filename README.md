@@ -14,7 +14,8 @@ workflows/post_markdown.ts                 # フォーム入力 → 投稿
 functions/post_markdown/
   definition.ts                            # 関数の入出力定義
   mod.ts                                   # SlackFunction + 各ハンドラ登録
-  blocks.ts                                # Block Kit ペイロード組み立て
+  blocks.ts                                # メッセージ外枠（投稿者/ボタン/フォールバック）
+  content_blocks.ts                        # 本文を markdown / table ブロックに変換
   markdown_table.ts                        # 本文を text/table セグメントに分割
   rich_text.ts                             # インライン Markdown → rich_text（セル装飾）
   file_source.ts                           # 直貼り/添付の解決・ファイル DL・長さガード

@@ -30,8 +30,9 @@ Block Kit の `markdown` ブロックは標準的な Markdown を渡すと Slack
 
 ただし `markdown` ブロックは**テーブルの列幅・折り返しを制御できず**、長文セルが
 あると横に伸びて横スクロールになる。そこで本文中の GFM テーブルだけは検出して
-**`table` ブロック（列ごとに `is_wrapped` で折り返し）**で描画する（`markdown_table.ts`
-／`blocks.ts`）。テーブル以外のテキストは引き続き `markdown` ブロック。生の
+**`table` ブロック（列ごとに `is_wrapped` で折り返し）**で描画する（検出は
+`markdown_table.ts`、ブロック化は `content_blocks.ts`）。テーブル以外のテキストは
+引き続き `markdown` ブロック。生の
 Markdown は保存・編集の正のまま、描画時にパースする。セル内の Markdown 装飾
 （太字・斜体・打消し・コード・リンク）は `rich_text` セルに変換して反映する
 （`rich_text.ts`）。装飾の無いセルは `raw_text`。
@@ -130,7 +131,9 @@ Link(Shortcut) Trigger
   （失敗してもログのみで投稿成否に影響させない）。
 - ヘルパは関心事ごとに分割: `file_source.ts`（入力経路の解決・DL・長さガード）、
   `interaction.ts`（payload 取り出し・権限ガード）、`edit_modal.ts`（編集モーダル）、
-  `blocks.ts`（ペイロード組み立て）、`client.ts`（SlackAPIClient の最小別名）。
+  `blocks.ts`（メッセージ外枠）／`content_blocks.ts`（本文→markdown/table ブロック）
+  ／`markdown_table.ts`・`rich_text.ts`（テーブル検出・セル装飾）、`client.ts`
+  （SlackAPIClient の最小別名）。
 - 通知用フォールバック `text` は**バイト長**で短く切り詰める（`buildFallbackText`）。
   本文を丸ごと積むと多バイト文字で `msg_too_long` を誘発するため。
 
