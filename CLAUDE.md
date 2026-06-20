@@ -47,6 +47,7 @@ functions/post_markdown/
   mod.ts          # SlackFunction 本体 + 各ハンドラの登録（オーケストレーション）
   blocks.ts       # Block Kit ペイロード組み立て（markdown / table / 投稿者 / ボタン）
   markdown_table.ts # 本文を text/table セグメントに分割（GFM テーブル検出）
+  rich_text.ts    # インライン Markdown → rich_text（テーブルのセル装飾）
   file_source.ts  # 入力経路の XOR 解決 + 添付ファイルの DL/デコード + 長さガード
   interaction.ts  # block_actions payload から channel/ts を取り出す + 権限ガード
   edit_modal.ts   # 編集モーダルの組み立て・private_metadata 入出力・入力値取り出し
@@ -64,7 +65,8 @@ datastores/posted_messages.ts      # 監査ログ + 編集時の現在値ルッ�
 - 本文中の GFM テーブルは `markdown` ブロックでは列を折り返せず横スクロールになる
   ため、`markdown_table.ts` で検出して **`table` ブロック（全列 `is_wrapped`）**で
   描画する。テキスト部分は従来どおり `markdown` ブロック。生の Markdown は保存・
-  編集の正のまま、描画時にパースする。
+  編集の正のまま、描画時にパースする。セル内の装飾（太字・斜体・打消し・コード・
+  リンク）は `rich_text.ts` で `rich_text` セルに変換して反映する。
 - OpenForm を使うため Workflow には `interactivity` 入力が必須。OpenForm は最初の
   ステップに置く。
 - 編集ボタンに継続応答するため、関数は `completed: false` で開いたままにする。

@@ -59,6 +59,25 @@ Deno.test("buildMarkdownBlocks: renders a GFM table as a wrapped table block", (
   assertEquals(blocks[1].type, "actions");
 });
 
+Deno.test("buildMarkdownBlocks: table cells render markdown as rich_text", () => {
+  const blocks = buildMarkdownBlocks(
+    "| 名前 | メモ |\n| --- | --- |\n| A | **重要** |",
+  );
+  const rows = blocks[0].rows as Array<Array<Record<string, unknown>>>;
+  // 装飾なしセルは raw_text のまま。
+  assertEquals(rows[1][0], { type: "raw_text", text: "A" });
+  // 装飾ありセルは rich_text。
+  assertEquals(rows[1][1], {
+    type: "rich_text",
+    elements: [
+      {
+        type: "rich_text_section",
+        elements: [{ type: "text", text: "重要", style: { bold: true } }],
+      },
+    ],
+  });
+});
+
 Deno.test("buildMarkdownBlocks: hides the edit button when over the editable cap", () => {
   const blocks = buildMarkdownBlocks("x".repeat(EDITABLE_MAX_LEN + 1));
   const elements = blocks[1].elements as Array<{ action_id: string }>;

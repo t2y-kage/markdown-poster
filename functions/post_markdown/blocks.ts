@@ -2,6 +2,7 @@
 // 本文（markdown / table ブロック）+ 投稿者 + 「編集」「削除」ボタンを返す。
 
 import { splitIntoSegments } from "./markdown_table.ts";
+import { parseInlineRichText } from "./rich_text.ts";
 
 export const EDIT_ACTION_ID = "edit_markdown";
 export const DELETE_ACTION_ID = "delete_markdown";
@@ -19,9 +20,23 @@ export const EDITABLE_MAX_LEN = 3000;
 
 export type Block = { type: string; [key: string]: unknown };
 
+// セルをテーブルセルに変換する。装飾の無いセルは raw_text、Markdown 装飾を含む
+// セルは rich_text にする（太字・斜体・打消し・コード・リンクを反映）。
+function buildCell(text: string): Block {
+  const els = parseInlineRichText(text);
+  // 装飾なし（単一のプレーンテキスト）は素朴な raw_text にする。
+  if (els.length === 0) return { type: "raw_text", text: "" };
+  if (els.length === 1 && els[0].type === "text" && !els[0].style) {
+    return { type: "raw_text", text: els[0].text };
+  }
+  return {
+    type: "rich_text",
+    elements: [{ type: "rich_text_section", elements: els }],
+  };
+}
+
 // GFM テーブルを table ブロックにする。全列を折り返し（is_wrapped）にして、
-// 長文セルがあっても横スクロールせず適度に改行されるようにする。セルはプレーン
-// テキスト（raw_text）として描画する（セル内の Markdown 装飾は反映されない）。
+// 長文セルがあっても横スクロールせず適度に改行されるようにする。
 function buildTableBlock(rows: string[][]): Block {
   const colCount = Math.max(...rows.map((row) => row.length));
   return {
@@ -30,10 +45,7 @@ function buildTableBlock(rows: string[][]): Block {
       is_wrapped: true,
     })),
     rows: rows.map((row) =>
-      Array.from(
-        { length: colCount },
-        (_, i) => ({ type: "raw_text", text: row[i] ?? "" }),
-      )
+      Array.from({ length: colCount }, (_, i) => buildCell(row[i] ?? ""))
     ),
   };
 }
