@@ -63,13 +63,17 @@ function pickMessageTsFromBody(body: unknown): string | undefined {
 
 // --- 編集モーダル ---
 
-type EditMeta = { channel: string; ts: string };
+// posted_by は最初に投稿したユーザ。編集時も投稿者表示を保つため引き回す。
+type EditMeta = { channel: string; ts: string; posted_by: string };
 
 function parseEditMeta(raw: string | undefined): EditMeta | null {
   try {
     const meta = JSON.parse(raw ?? "{}") as Partial<EditMeta>;
-    if (typeof meta.channel === "string" && typeof meta.ts === "string") {
-      return { channel: meta.channel, ts: meta.ts };
+    if (
+      typeof meta.channel === "string" && typeof meta.ts === "string" &&
+      typeof meta.posted_by === "string"
+    ) {
+      return { channel: meta.channel, ts: meta.ts, posted_by: meta.posted_by };
     }
   } catch { /* fall through */ }
   return null;
@@ -138,7 +142,7 @@ export default SlackFunction(
 
     const response = await client.chat.postMessage({
       channel: target.channel,
-      ...buildMarkdownMessage(text),
+      ...buildMarkdownMessage(text, submitted_by),
       ...(target.thread_ts ? { thread_ts: target.thread_ts } : {}),
     });
 
@@ -194,7 +198,10 @@ export default SlackFunction(
       const view = await client.views.open({
         // Run on Slack では trigger_id ではなく interactivity_pointer を渡す
         trigger_id: body.interactivity.interactivity_pointer,
-        view: buildEditModalView({ channel, ts }, currentMarkdown),
+        view: buildEditModalView(
+          { channel, ts, posted_by: inputs.submitted_by },
+          currentMarkdown,
+        ),
       });
 
       if (!view.ok) {
@@ -225,7 +232,7 @@ export default SlackFunction(
       const updated = await client.chat.update({
         channel: meta.channel,
         ts: meta.ts,
-        ...buildMarkdownMessage(newMarkdown),
+        ...buildMarkdownMessage(newMarkdown, meta.posted_by),
       });
 
       if (!updated.ok) {

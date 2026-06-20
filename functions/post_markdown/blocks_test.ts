@@ -30,3 +30,12 @@ Deno.test("buildMarkdownBlocks: emits a markdown block followed by an edit actio
   const elements = blocks[1].elements as Array<{ action_id: string }>;
   assertEquals(elements[0].action_id, EDIT_ACTION_ID);
 });
+
+Deno.test("buildMarkdownBlocks: prepends a poster context block when postedBy is given", () => {
+  const blocks = buildMarkdownBlocks("# hi", "U123");
+  assertEquals(blocks[0].type, "context");
+  const elements = blocks[0].elements as Array<{ type: string; text: string }>;
+  assertEquals(elements[0], { type: "mrkdwn", text: "投稿者: <@U123>" });
+  assertEquals(blocks[1].type, "markdown");
+  assertEquals(blocks[2].type, "actions");
+});

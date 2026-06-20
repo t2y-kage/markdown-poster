@@ -9,21 +9,32 @@ const FALLBACK_MAX_LEN = 3000;
 
 export type Block = { type: string; [key: string]: unknown };
 
-export function buildMarkdownBlocks(markdown: string): Block[] {
-  return [
-    { type: "markdown", text: markdown },
-    {
-      type: "actions",
-      block_id: EDIT_BLOCK_ID,
-      elements: [
-        {
-          type: "button",
-          action_id: EDIT_ACTION_ID,
-          text: { type: "plain_text", text: "編集" },
-        },
-      ],
-    },
-  ];
+export function buildMarkdownBlocks(
+  markdown: string,
+  postedBy?: string,
+): Block[] {
+  const blocks: Block[] = [];
+  // 誰が投稿したか分かるよう、本文の前に投稿者を表示する。mrkdwn の <@U…> は
+  // メンションとして確実にレンダリングされる（markdown ブロックの挙動に依らない）。
+  if (postedBy) {
+    blocks.push({
+      type: "context",
+      elements: [{ type: "mrkdwn", text: `投稿者: <@${postedBy}>` }],
+    });
+  }
+  blocks.push({ type: "markdown", text: markdown });
+  blocks.push({
+    type: "actions",
+    block_id: EDIT_BLOCK_ID,
+    elements: [
+      {
+        type: "button",
+        action_id: EDIT_ACTION_ID,
+        text: { type: "plain_text", text: "編集" },
+      },
+    ],
+  });
+  return blocks;
 }
 
 export function buildFallbackText(markdown: string): string {
@@ -35,10 +46,11 @@ export function buildFallbackText(markdown: string): string {
 // deno-slack-sdk の型が markdown ブロックに未追随なため、キャストはここに閉じ込める。
 export function buildMarkdownMessage(
   markdown: string,
+  postedBy?: string,
 ): { text: string; blocks: Record<string, unknown>[] } {
   return {
     text: buildFallbackText(markdown),
-    blocks: buildMarkdownBlocks(markdown) as unknown as Record<
+    blocks: buildMarkdownBlocks(markdown, postedBy) as unknown as Record<
       string,
       unknown
     >[],
