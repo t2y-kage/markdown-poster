@@ -4,7 +4,7 @@ Slack-hosted（Run on Slack / Deno Slack SDK）で動作する、Markdown を
 リッチなメッセージとして投稿する Slack アプリの設計仕様。テーブル記法も
 そのまま描画されます。
 
-リポジトリ: https://github.com/t2y-kage/markdown-poster
+リポジトリ: https://github.com/kazamori/markdown-poster
 
 ---
 
