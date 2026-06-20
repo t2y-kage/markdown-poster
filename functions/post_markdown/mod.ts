@@ -1,6 +1,10 @@
 import { SlackFunction } from "deno-slack-sdk/mod.ts";
 import { PostMarkdownDefinition } from "./definition.ts";
-import { buildMarkdownMessage, EDIT_ACTION_ID } from "./blocks.ts";
+import {
+  buildMarkdownMessage,
+  DELETE_ACTION_ID,
+  EDIT_ACTION_ID,
+} from "./blocks.ts";
 import { parseThreadUrl } from "./thread_url.ts";
 import { fetchLatestMarkdown, recordPost } from "./audit_log.ts";
 import {
@@ -59,6 +63,32 @@ function pickChannelFromBody(body: unknown, fallback: string): string {
 function pickMessageTsFromBody(body: unknown): string | undefined {
   const b = body as ActionBodyShape;
   return b.container?.message_ts ?? b.message?.ts;
+}
+
+// 編集・削除はどちらも「最初に投稿したユーザだけ」に許可する共通ガード。
+// thread_url 経由で別チャンネルに投稿された可能性があるため、対象の channel/ts は
+// inputs ではなく payload から取り出す。権限を満たさなければ ephemeral で通知し
+// null を返す（呼び出し側は null なら中断する）。
+async function resolveOwnedTarget(
+  // deno-lint-ignore no-explicit-any
+  body: any,
+  inputs: { channel: string; submitted_by: string },
+  // deno-lint-ignore no-explicit-any
+  client: any,
+): Promise<{ channel: string; ts: string } | null> {
+  const channel = pickChannelFromBody(body, inputs.channel);
+  const ts = pickMessageTsFromBody(body);
+  if (!ts) return null;
+
+  if (body.user.id !== inputs.submitted_by) {
+    await client.chat.postEphemeral({
+      channel,
+      user: body.user.id,
+      text: "この操作ができるのは、最初に投稿したユーザだけです。",
+    });
+    return null;
+  }
+  return { channel, ts };
 }
 
 // --- 編集モーダル ---
@@ -166,20 +196,9 @@ export default SlackFunction(
   .addBlockActionsHandler(
     EDIT_ACTION_ID,
     async ({ body, inputs, client }) => {
-      // thread_url 経由で別チャンネルに投稿された可能性があるため、
-      // 編集対象のチャンネル/ts は inputs ではなく payload から取り出す。
-      const channel = pickChannelFromBody(body, inputs.channel);
-      const ts = pickMessageTsFromBody(body);
-      if (!ts) return;
-
-      if (body.user.id !== inputs.submitted_by) {
-        await client.chat.postEphemeral({
-          channel,
-          user: body.user.id,
-          text: "この投稿を編集できるのは、最初に投稿したユーザだけです。",
-        });
-        return;
-      }
+      const target = await resolveOwnedTarget(body, inputs, client);
+      if (!target) return;
+      const { channel, ts } = target;
 
       const currentMarkdown = await fetchLatestMarkdown(client, ts);
 
@@ -249,5 +268,25 @@ export default SlackFunction(
       });
 
       // 何も返さなければ Slack 側でモーダルが閉じる。関数は引き続き開いておく。
+    },
+  )
+  .addBlockActionsHandler(
+    DELETE_ACTION_ID,
+    async ({ body, inputs, client }) => {
+      const target = await resolveOwnedTarget(body, inputs, client);
+      if (!target) return;
+
+      // bot が投稿したメッセージなので chat:write の範囲で削除できる。
+      const deleted = await client.chat.delete({
+        channel: target.channel,
+        ts: target.ts,
+      });
+      await client.chat.postEphemeral({
+        channel: target.channel,
+        user: body.user.id,
+        text: deleted.ok
+          ? "メッセージを削除しました。"
+          : `削除に失敗しました: ${deleted.error ?? "unknown error"}`,
+      });
     },
   );

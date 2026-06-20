@@ -2,6 +2,7 @@
 // markdown ブロック + 「編集」ボタンの actions ブロックを返す。
 
 export const EDIT_ACTION_ID = "edit_markdown";
+export const DELETE_ACTION_ID = "delete_markdown";
 const EDIT_BLOCK_ID = "edit_actions";
 
 // text は通知・検索用のフォールバック。保守的な上限で切り詰める。
@@ -31,6 +32,23 @@ export function buildMarkdownBlocks(
         type: "button",
         action_id: EDIT_ACTION_ID,
         text: { type: "plain_text", text: "編集" },
+      },
+      {
+        type: "button",
+        action_id: DELETE_ACTION_ID,
+        style: "danger",
+        text: { type: "plain_text", text: "削除" },
+        // 誤クリック防止に確認ダイアログを挟む。削除は元に戻せない。
+        confirm: {
+          title: { type: "plain_text", text: "メッセージを削除" },
+          text: {
+            type: "plain_text",
+            text: "この投稿を削除します。元に戻せません。",
+          },
+          confirm: { type: "plain_text", text: "削除" },
+          deny: { type: "plain_text", text: "キャンセル" },
+          style: "danger",
+        },
       },
     ],
   });
