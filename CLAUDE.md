@@ -4,18 +4,16 @@
 
 ## 概要
 
-`markdown-poster` は Slack-hosted（Run on Slack / Deno Slack SDK）で動作する Slack
-アプリ。フォームに貼り付けた Markdown を、Block Kit の `markdown` ブロックで
-レンダリングされた表示として投稿する。投稿後はその場で編集もできる。
+`markdown-poster` は Slack-hosted（Run on Slack / Deno Slack SDK）で動作する Slack アプリ。
+フォームに貼り付けた Markdown を、Block Kit の `markdown` ブロックでレンダリングされた表示として投稿する。
+投稿後はその場で編集もできる。
 
-外部サーバを持たず Slack のマネージドインフラ上で完結させ、ランニングコストを
-ゼロにする方針。詳細は [DESIGN.md](./DESIGN.md)、使い方は [README.md](./README.md)
-を参照。
+外部サーバを持たず Slack のマネージドインフラ上で完結させ、ランニングコストをゼロにする方針。
+詳細は [DESIGN.md](./DESIGN.md)、使い方は [README.md](./README.md) を参照。
 
-> 注: 名称は `markdown-table-poster` から `markdown-poster` に変更済み。機能は
-> Markdown テーブルに限らず Markdown 全般を投稿できる。これに伴い `post_markdown_table`
-> 系の識別子・ファイル名・Datastore (`posted_tables` → `posted_messages`) も
-> table 非依存の名前へリネーム済み（互換性は意図的に破棄）。
+> 注: 名称は `markdown-table-poster` から `markdown-poster` に変更済み。
+> 機能は Markdown テーブルに限らず Markdown 全般を投稿できる。
+> これに伴い `post_markdown_table` 系の識別子、ファイル名、Datastore (`posted_tables` → `posted_messages`) も table 非依存の名前へリネーム済み（互換性は意図的に破棄）。
 
 ## 開発コマンド
 
@@ -61,40 +59,23 @@ datastores/posted_messages.ts      # 監査ログ + 編集時の現在値ルッ�
 
 要点:
 
-- 投稿は組み込み `SendMessage` ではなく**カスタム関数経由**。`markdown` ブロックを
-  渡すため `client.chat.postMessage` を直接呼ぶ。
-- 本文中の GFM テーブルは `markdown` ブロックでは列を折り返せず横スクロールになる
-  ため、`markdown_table.ts` で検出して **`table` ブロック（全列 `is_wrapped`）**で
-  描画する。テキスト部分は従来どおり `markdown` ブロック。生の Markdown は保存・
-  編集の正のまま、描画時にパースする。セル内の装飾（太字・斜体・打消し・コード・
-  リンク）は `rich_text.ts` で `rich_text` セルに変換して反映する。
-- OpenForm を使うため Workflow には `interactivity` 入力が必須。OpenForm は最初の
-  ステップに置く。
+- 投稿は組み込み `SendMessage` ではなくカスタム関数経由で行う。`markdown` ブロックを渡すため `client.chat.postMessage` を直接呼ぶ。
+- 本文中の GFM テーブルは `markdown` ブロックでは列を折り返せず横スクロールになるため、`markdown_table.ts` で検出して `table` ブロック（全列 `is_wrapped`）で描画する。テキスト部分は従来どおり `markdown` ブロック。生の Markdown を保存と編集の正とし、描画時にパースする。セル内の装飾（太字、斜体、打消し、コード、リンク）は `rich_text.ts` で `rich_text` セルに変換して反映する。
+- OpenForm を使うため Workflow には `interactivity` 入力が必須。OpenForm は最初のステップに置く。
 - 編集ボタンに継続応答するため、関数は `completed: false` で開いたままにする。
-- 編集は誰でも可能（投稿者と異なる編集者はメッセージに併記される）。削除は最初に
-  投稿したユーザのみ。
-- 入力経路は**直貼り（〜3,000字）か添付ファイル（〜12,000字）の XOR**。`mod.ts`
-  冒頭の `resolveSource` で本文文字列を確定させ、以降は経路に依らず共通。
-- 添付ファイルは `files.info` → `url_private_download` を bot token 付きで fetch し
-  UTF-8 デコードする（`files:read` スコープ + `files.slack.com` の outgoing domain
-  が必要）。
+- 編集は誰でも可能（投稿者と異なる編集者はメッセージに併記される）。削除は最初に投稿したユーザのみ。
+- 入力経路は直貼り（〜3,000字）か添付ファイル（〜12,000字）の XOR。`mod.ts` 冒頭の `resolveSource` で本文文字列を確定させ、以降は経路に依らず共通。
+- 添付ファイルは `files.info` → `url_private_download` を bot token 付きで fetch し UTF-8 デコードする（`files:read` スコープ + `files.slack.com` の outgoing domain が必要）。
 
 ## コード規約
 
-- 新しい純粋関数を追加するときは、隣に `*_test.ts` を置く形を踏襲する
-  （例: `thread_url.ts` ↔ `thread_url_test.ts`）。
+- 新しい純粋関数を追加するときは、隣に `*_test.ts` を置く形を踏襲する（例: `thread_url.ts` ↔ `thread_url_test.ts`）。
 - 変更後は必ず `deno task test` を通す。
-- `markdown` ブロックの型が `deno-slack-sdk` に未追随のため `blocks` をキャスト
-  している箇所がある（`blocks.ts` 参照）。
+- `markdown` ブロックの型が `deno-slack-sdk` に未追随のため `blocks` をキャストしている箇所がある（`blocks.ts` 参照）。
 
 ## 注意点
 
-- OpenForm の文字列フィールド（直貼り）はおおむね 3,000 文字が上限。これを超える
-  長文はテキストファイルを添付し、`markdown` ブロックの上限 12,000 文字まで扱う。
-- 編集モーダルの `plain_text_input` は `max_length` が 3,000 まで（Slack の制約）。
-  そのため 3,000 字超の投稿は編集ボタンを出さず、その場では編集不可（再投稿で対応）。
-- 送信長エラー `msg_too_long` はバイト長で判定される。本文を通知用 `text`
-  フォールバックに丸ごと積むと多バイト文字で容易に超過するため、`blocks.ts` の
-  `buildFallbackText` は**バイト長**で短く切り詰めている。
-- Datastore は監査ログと編集時の現在値ルックアップを兼ねる。外す場合の手順は
-  README の「監査ログ Datastore を使わない場合」を参照。
+- OpenForm の文字列フィールド（直貼り）はおおむね 3,000 文字が上限。これを超える長文はテキストファイルを添付し、`markdown` ブロックの上限 12,000 文字まで扱う。
+- 編集モーダルの `plain_text_input` は `max_length` が 3,000 まで（Slack の制約）。そのため 3,000 字超の投稿は編集ボタンを出さず、その場では編集不可（再投稿で対応）。
+- 送信長エラー `msg_too_long` はバイト長で判定される。本文を通知用 `text` フォールバックに丸ごと積むと多バイト文字で容易に超過するため、`blocks.ts` の `buildFallbackText` はバイト長で短く切り詰めている。
+- Datastore は監査ログと編集時の現在値ルックアップを兼ねる。外す場合の手順は README の「監査ログ Datastore を使わない場合」を参照。
