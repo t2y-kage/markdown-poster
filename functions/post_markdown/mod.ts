@@ -6,6 +6,7 @@ import {
   EDIT_ACTION_ID,
   EDITABLE_MAX_LEN,
 } from "./blocks.ts";
+import { checkBlockBudget } from "./block_budget.ts";
 import { logApiFailure } from "./debug_log.ts";
 import { parseThreadUrl } from "./thread_url.ts";
 import { fetchLatestMarkdown, recordPost } from "./audit_log.ts";
@@ -51,6 +52,11 @@ function describePostError(error: string | undefined): string {
   if (error === "msg_too_long" || error === "msg_blocks_too_long") {
     return "内容が Slack のメッセージ上限を超えました（日本語など多バイト文字は見た目の文字数より大きくなります）。文字数を減らすか、不要な行を削ってください。";
   }
+  // 投稿前に checkBlockBudget で弾いているが、見積もりが実際の展開とずれた場合の
+  // 保険。ログ（logApiFailure）に response_metadata が出るので原因を追える。
+  if (error === "invalid_blocks") {
+    return "Slack のブロック上限（展開後 50 個）を超えた可能性があります。見出し・区切り線・テーブルの数を減らすか、ファイルを分割してください。";
+  }
   return `投稿に失敗しました: ${error ?? "unknown error"}`;
 }
 
@@ -83,6 +89,12 @@ export default SlackFunction(
     if ("error" in target) return target;
 
     const message = buildMarkdownMessage(text, submitted_by);
+
+    // 送信前に展開後のブロック数を見積もる。超過分は自動で削らず、どこを減らせば
+    // よいかを添えて投稿を中止する（本文の見た目を勝手に変えないため）。
+    const budget = checkBlockBudget(message.blocks);
+    if (!budget.ok) return { error: budget.message };
+
     const response = await client.chat.postMessage({
       channel: target.channel,
       ...message,
@@ -167,6 +179,9 @@ export default SlackFunction(
         meta.posted_by,
         body.user.id,
       );
+      const budget = checkBlockBudget(message.blocks);
+      if (!budget.ok) return inputErrorResponse(budget.message);
+
       const updated = await client.chat.update({
         channel: meta.channel,
         ts: meta.ts,
