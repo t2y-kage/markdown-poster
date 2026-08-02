@@ -2,7 +2,9 @@
   "importMap": "import_map.json",
   "lock": false,
   "tasks": {
-    "test": "deno fmt --check && deno lint && deno check **/*.ts && deno test --allow-read --allow-net"
+    "test": "deno fmt --check && deno lint && deno check **/*.ts && deno test --allow-read --allow-net",
+    // アップロード前に手元で Markdown を検査する（deno task check foo.md）
+    "check": "deno run --allow-read tools/check_markdown.ts"
   },
   "fmt": {
     "exclude": ["node_modules/", "build/", "dist/", ".slack/"],
