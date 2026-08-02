@@ -6,6 +6,7 @@ import {
   EDIT_ACTION_ID,
   EDITABLE_MAX_LEN,
 } from "./blocks.ts";
+import { logApiFailure } from "./debug_log.ts";
 import { parseThreadUrl } from "./thread_url.ts";
 import { fetchLatestMarkdown, recordPost } from "./audit_log.ts";
 import {
@@ -81,13 +82,15 @@ export default SlackFunction(
     const target = resolvePostTarget(channel, thread_url);
     if ("error" in target) return target;
 
+    const message = buildMarkdownMessage(text, submitted_by);
     const response = await client.chat.postMessage({
       channel: target.channel,
-      ...buildMarkdownMessage(text, submitted_by),
+      ...message,
       ...(target.thread_ts ? { thread_ts: target.thread_ts } : {}),
     });
 
     if (!response.ok) {
+      logApiFailure("chat.postMessage", response, message.blocks);
       return { error: describePostError(response.error) };
     }
 
@@ -134,6 +137,7 @@ export default SlackFunction(
       });
 
       if (!view.ok) {
+        logApiFailure("views.open", view);
         await client.chat.postEphemeral({
           channel,
           user: body.user.id,
@@ -157,14 +161,20 @@ export default SlackFunction(
         return inputErrorResponse("Markdown を入力してください。");
       }
 
+      // 投稿者は元のまま保ち、今回の編集者（body.user.id）を併記する。
+      const message = buildMarkdownMessage(
+        newMarkdown,
+        meta.posted_by,
+        body.user.id,
+      );
       const updated = await client.chat.update({
         channel: meta.channel,
         ts: meta.ts,
-        // 投稿者は元のまま保ち、今回の編集者（body.user.id）を併記する。
-        ...buildMarkdownMessage(newMarkdown, meta.posted_by, body.user.id),
+        ...message,
       });
 
       if (!updated.ok) {
+        logApiFailure("chat.update", updated, message.blocks);
         return inputErrorResponse(describePostError(updated.error));
       }
 
