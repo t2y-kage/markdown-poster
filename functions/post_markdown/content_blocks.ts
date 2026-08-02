@@ -8,9 +8,12 @@ import { parseInlineRichText } from "./rich_text.ts";
 
 // セルをテーブルセルに変換する。装飾の無いセルは raw_text、Markdown 装飾を含む
 // セルは rich_text にする（太字・斜体・打消し・コード・リンクを反映）。
+//
+// 空セル（`| | a |` や列数の足りない行）は text を空文字にすると Slack が
+// invalid_blocks を返すため、空白 1 文字に置き換える。
 function buildCell(text: string): Block {
   const els = parseInlineRichText(text);
-  if (els.length === 0) return { type: "raw_text", text: "" };
+  if (els.length === 0) return { type: "raw_text", text: " " };
   if (els.length === 1 && els[0].type === "text" && !els[0].style) {
     return { type: "raw_text", text: els[0].text };
   }
