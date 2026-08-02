@@ -33,6 +33,30 @@ Deno.test("buildContentBlocks: a GFM table becomes a wrapped table block", () =>
   ]);
 });
 
+Deno.test("buildContentBlocks: empty cells never produce empty text", () => {
+  // 先頭ヘッダが空・本文行のセル数が足りない、どちらも invalid_blocks の原因。
+  const blocks = buildContentBlocks(
+    "| | 帯域比 | 電力比 |\n|---|---|---|\n| A | **6.6倍** |",
+  );
+  const rows = blocks[0].rows as Array<Array<Record<string, unknown>>>;
+  assertEquals(rows[0][0], { type: "raw_text", text: " " });
+  // 列数の足りない行は空セルで補われる。
+  assertEquals(rows[1].length, 3);
+  assertEquals(rows[1][2], { type: "raw_text", text: " " });
+  // 空文字の text を持つセルが 1 つも無いこと。
+  for (const row of rows) {
+    for (const cell of row) {
+      assertEquals(cell.text === "", false);
+    }
+  }
+});
+
+Deno.test("buildContentBlocks: whitespace-only cells are treated as empty", () => {
+  const blocks = buildContentBlocks("| a |   |\n| --- | --- |\n| 1 | 2 |");
+  const rows = blocks[0].rows as Array<Array<Record<string, unknown>>>;
+  assertEquals(rows[0][1], { type: "raw_text", text: " " });
+});
+
 Deno.test("buildContentBlocks: table cells render markdown as rich_text", () => {
   const blocks = buildContentBlocks(
     "| 名前 | メモ |\n| --- | --- |\n| A | **重要** |",
