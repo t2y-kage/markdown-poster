@@ -1,0 +1,344 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "markdown-poster のアーキテクチャ",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1200,
+      620
+    ],
+    "repository": {
+      "url": "https://github.com/kazamori/markdown-poster",
+      "revision": "ab742534b8f508e0f069292f3d786e151b388471"
+    },
+    "views": [
+      {
+        "id": "post-path",
+        "label": "投稿の経路",
+        "focus": [
+          "user",
+          "trigger",
+          "workflow",
+          "fn",
+          "render",
+          "message"
+        ],
+        "note": "ショートカットからフォーム、関数、Block Kit 変換を経て投稿されるまでの主経路。"
+      },
+      {
+        "id": "edit-path",
+        "label": "編集と保存",
+        "focus": [
+          "message",
+          "edit",
+          "store",
+          "fn"
+        ],
+        "note": "投稿済みメッセージの編集と、Datastore に残る監査ログの往復。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "Slack ユーザー",
+      "sublabel": "ショートカット実行",
+      "pos": [
+        40,
+        120
+      ],
+      "size": [
+        150,
+        74
+      ]
+    },
+    {
+      "id": "trigger",
+      "type": "cloud",
+      "label": "Link トリガー",
+      "sublabel": "Shortcut",
+      "pos": [
+        230,
+        120
+      ],
+      "size": [
+        150,
+        74
+      ],
+      "sources": [
+        {
+          "path": "triggers/post_markdown_trigger.ts",
+          "label": "trigger 定義"
+        }
+      ]
+    },
+    {
+      "id": "workflow",
+      "type": "cloud",
+      "label": "Workflow",
+      "sublabel": "OpenForm で入力収集",
+      "pos": [
+        420,
+        120
+      ],
+      "size": [
+        150,
+        74
+      ],
+      "sources": [
+        {
+          "path": "workflows/post_markdown.ts",
+          "label": "2 ステップ構成"
+        }
+      ]
+    },
+    {
+      "id": "fn",
+      "type": "backend",
+      "label": "post_markdown 関数",
+      "sublabel": "入力の確定とガード",
+      "pos": [
+        610,
+        120
+      ],
+      "size": [
+        150,
+        74
+      ],
+      "sources": [
+        {
+          "path": "functions/post_markdown/mod.ts",
+          "label": "オーケストレーション"
+        },
+        {
+          "path": "functions/post_markdown/file_source.ts",
+          "label": "入力経路の XOR"
+        }
+      ]
+    },
+    {
+      "id": "render",
+      "type": "backend",
+      "label": "Block Kit 変換",
+      "sublabel": "markdown / table ブロック",
+      "pos": [
+        800,
+        120
+      ],
+      "size": [
+        150,
+        74
+      ],
+      "sources": [
+        {
+          "path": "functions/post_markdown/content_blocks.ts",
+          "label": "本文の分割と変換"
+        },
+        {
+          "path": "functions/post_markdown/markdown_table.ts",
+          "label": "GFM テーブル検出"
+        }
+      ]
+    },
+    {
+      "id": "message",
+      "type": "frontend",
+      "label": "チャンネル投稿",
+      "sublabel": "編集・削除ボタン付き",
+      "pos": [
+        990,
+        120
+      ],
+      "size": [
+        150,
+        74
+      ],
+      "sources": [
+        {
+          "path": "functions/post_markdown/blocks.ts",
+          "label": "メッセージ外枠"
+        }
+      ]
+    },
+    {
+      "id": "attach",
+      "type": "external",
+      "label": "files.slack.com",
+      "sublabel": "添付ファイル本体",
+      "pos": [
+        420,
+        400
+      ],
+      "size": [
+        150,
+        74
+      ],
+      "sources": [
+        {
+          "path": "functions/post_markdown/file_source.ts",
+          "label": "ダウンロードとデコード"
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "posted_messages",
+      "sublabel": "監査ログ Datastore",
+      "pos": [
+        640,
+        400
+      ],
+      "size": [
+        150,
+        74
+      ],
+      "sources": [
+        {
+          "path": "datastores/posted_messages.ts",
+          "label": "スキーマ定義"
+        }
+      ]
+    },
+    {
+      "id": "edit",
+      "type": "frontend",
+      "label": "編集モーダル",
+      "sublabel": "views.open / 送信受付",
+      "pos": [
+        990,
+        400
+      ],
+      "size": [
+        150,
+        74
+      ],
+      "sources": [
+        {
+          "path": "functions/post_markdown/edit_modal.ts",
+          "label": "モーダル組み立て"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "アプリ実行環境（Run on Slack）",
+      "wraps": [
+        "trigger",
+        "workflow",
+        "fn",
+        "render"
+      ],
+      "pad": 44
+    }
+  ],
+  "connections": [
+    {
+      "id": "user-trigger",
+      "from": "user",
+      "to": "trigger",
+      "label": "起動",
+      "variant": "emphasis"
+    },
+    {
+      "id": "trigger-workflow",
+      "from": "trigger",
+      "to": "workflow",
+      "label": "Workflow 実行",
+      "labelDy": -31
+    },
+    {
+      "id": "workflow-fn",
+      "from": "workflow",
+      "to": "fn",
+      "label": "フォーム入力",
+      "labelDy": -24
+    },
+    {
+      "id": "fn-render",
+      "from": "fn",
+      "to": "render",
+      "label": "確定した本文",
+      "labelDy": -31
+    },
+    {
+      "id": "render-message",
+      "from": "render",
+      "to": "message",
+      "label": "chat.postMessage",
+      "variant": "emphasis",
+      "labelDy": -31
+    },
+    {
+      "id": "fn-attach",
+      "from": "fn",
+      "to": "attach",
+      "label": "files.info で取得",
+      "variant": "dashed"
+    },
+    {
+      "id": "fn-store",
+      "from": "fn",
+      "to": "store",
+      "label": "投稿を記録",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "store-edit",
+      "from": "store",
+      "to": "edit",
+      "label": "現在の本文を照会",
+      "variant": "dashed"
+    },
+    {
+      "id": "message-edit",
+      "from": "message",
+      "to": "edit",
+      "label": "編集ボタン",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": -70,
+      "labelDy": 34
+    },
+    {
+      "id": "edit-message",
+      "from": "edit",
+      "to": "message",
+      "label": "chat.update",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDx": 70
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Slack 上で完結",
+      "items": [
+        "トリガー・Workflow・関数はすべて Slack のマネージドインフラで動く",
+        "外部サーバを持たないためランニングコストがかからない"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "投稿前のガード",
+      "items": [
+        "直貼り（〜3,000字）と添付（〜12,000字）は排他で受け取る",
+        "展開後 50 ブロックを超える見積もりなら投稿せず理由を返す"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "投稿後の操作",
+      "items": [
+        "関数は completed: false で待機し block_actions に応答する",
+        "編集は誰でも可能、削除は最初に投稿したユーザのみ"
+      ]
+    }
+  ]
+}
