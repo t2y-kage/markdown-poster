@@ -46,6 +46,15 @@ Block Kit の `markdown` ブロックは、標準的な Markdown を渡すと Sl
 
 Run on Slack の 3 要素（Trigger → Workflow → Function）で構成する。
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/architecture/architecture-dark.png">
+  <img alt="markdown-poster のアーキテクチャ図。Slack ユーザーのショートカットから Link トリガー、Workflow の OpenForm、post_markdown 関数、Block Kit 変換を経てチャンネルに投稿する主経路と、添付ファイルの取得、監査ログ Datastore、編集モーダルの枝を示す。" src="./docs/architecture/architecture-light.png">
+</picture>
+
+図の定義と再生成の手順は [docs/architecture/](./docs/architecture/) を参照。
+
+ワークフローのステップと、その中での分岐は次のとおり。
+
 ```
 Link(Shortcut) Trigger
     └─ Workflow (interactivity 必須)
